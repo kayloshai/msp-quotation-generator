@@ -1,2 +1,2 @@
-# msp-design-system
+# msp-quotation-generator
 msp modular react components design system
