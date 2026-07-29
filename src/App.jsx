@@ -56,6 +56,7 @@ function App() {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [selectedHistoryQuote, setSelectedHistoryQuote] = useState(null)
   const [activePage, setActivePage] = useState(getInitialActivePage)
+  const [pdfTemplateMode, setPdfTemplateMode] = useState('quote')
   const [timeEntries, setTimeEntries] = useState([
     { id: 1, title: 'Review client quote', date: '2026-07-29', hours: '2.5', status: 'Planned' },
     { id: 2, title: 'Site coordination call', date: '2026-07-30', hours: '1.0', status: 'In progress' }
@@ -568,59 +569,23 @@ function App() {
     setSelectedHistoryQuote(null)
   }
 
-  const downloadTextReport = (fileName, content) => {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = fileName
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  }
-
-  const handleHeaderExport = () => {
+  const handleHeaderExport = async () => {
     if (activePage === 'time-management') {
-      const lines = [
-        'Time Management Report',
-        `Generated: ${new Date().toLocaleString()}`,
-        '',
-        'Employee Hours:',
-        ...employeeHours.map((entry) => `- ${entry.name || 'Unknown'} | ${entry.date || '-'} | ${entry.timeIn || '-'}-${entry.timeOut || '-'}`),
-        '',
-        'Current Project Hours:',
-        ...currentProjectHours.map((entry) => `- ${entry.name || 'Unknown'} | ${entry.hours || '-'} | ${entry.project || '-'}`),
-        '',
-        'Planned Project Hours:',
-        ...plannedProjectHours.map((entry) => `- ${entry.name || 'Unknown'} | ${entry.hours || '-'} | ${entry.project || '-'}`),
-        '',
-        'Activity Log:',
-        ...timeLogEntries.map((entry) => `- [${entry.timestamp || '-'}] ${entry.action || 'action'} ${entry.section || ''}`)
-      ]
-
-      downloadTextReport('time-management-report.txt', lines.join('\n'))
+      await generateReportPDF('time-report', 'time-management-report.pdf')
       return
     }
 
     if (activePage === 'employee-management') {
-      const lines = [
-        'Employee Report',
-        `Generated: ${new Date().toLocaleString()}`,
-        `Total employees: ${employeeOptions.length}`,
-        '',
-        'Employees:',
-        ...employeeOptions.map((employee) => `- ${employee.name || 'Unknown'} | ${employee.role || '-'} | ${employee.department || '-'} | ${employee.email || '-'} | ${employee.phone || '-'}`)
-      ]
-
-      downloadTextReport('employee-report.txt', lines.join('\n'))
+      await generateReportPDF('employee-report', 'employee-report.pdf')
       return
     }
 
-    void generatePDF()
+    await generatePDF()
   }
 
   const generatePDF = async () => {
+    setPdfTemplateMode('quote')
+    await new Promise((resolve) => setTimeout(resolve, 150))
     try {
       const element = quotationRef.current
       const invoiceContainer = element?.querySelector('.invoice-container')
@@ -719,6 +684,92 @@ function App() {
     } catch (error) {
       console.error('Error generating PDF:', error)
       alert('Error generating PDF. Please check the console for details.')
+    }
+  }
+
+  const generateReportPDF = async (mode, fileName) => {
+    setPdfTemplateMode(mode)
+    await new Promise((resolve) => setTimeout(resolve, 150))
+
+    try {
+      const element = quotationRef.current
+      const invoiceContainer = element?.querySelector('.invoice-container')
+
+      const originalDisplay = element.style.display
+      const originalWidth = element.style.width
+      const originalHeight = element.style.height
+      const originalPadding = element.style.padding
+      const originalBackground = element.style.backgroundColor
+      const originalInvoicePadding = invoiceContainer?.style.padding || ''
+      const originalInvoiceMargin = invoiceContainer?.style.margin || ''
+      const originalInvoiceWidth = invoiceContainer?.style.width || ''
+      const originalInvoiceHeight = invoiceContainer?.style.height || ''
+
+      element.style.display = 'block'
+      element.style.width = '210mm'
+      element.style.height = '297mm'
+      element.style.padding = '0'
+      element.style.backgroundColor = 'white'
+      element.style.boxSizing = 'border-box'
+
+      if (invoiceContainer) {
+        invoiceContainer.style.padding = '10px'
+        invoiceContainer.style.margin = '0'
+        invoiceContainer.style.width = '100%'
+        invoiceContainer.style.height = '100%'
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        width: element.offsetWidth,
+        height: element.offsetHeight,
+        windowWidth: document.documentElement.scrollWidth,
+        windowHeight: document.documentElement.scrollHeight
+      })
+
+      element.style.display = originalDisplay
+      element.style.width = originalWidth
+      element.style.height = originalHeight
+      element.style.padding = originalPadding
+      element.style.backgroundColor = originalBackground
+
+      if (invoiceContainer) {
+        invoiceContainer.style.padding = originalInvoicePadding
+        invoiceContainer.style.margin = originalInvoiceMargin
+        invoiceContainer.style.width = originalInvoiceWidth
+        invoiceContainer.style.height = originalInvoiceHeight
+      }
+
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      })
+
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const imgProps = pdf.getImageProperties(imgData)
+      const imgHeight = (imgProps.height * pdfWidth) / imgProps.width
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight)
+
+      const pdfBlob = pdf.output('blob')
+      const pdfPreviewUrl = URL.createObjectURL(pdfBlob)
+      const link = document.createElement('a')
+      link.href = pdfPreviewUrl
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(pdfPreviewUrl)
+    } catch (error) {
+      console.error('Error generating report PDF:', error)
+      alert('Error generating report PDF. Please check the console for details.')
     }
   }
 
@@ -1479,7 +1530,6 @@ function App() {
       )}
       <div ref={quotationRef} className={`pdf-template ${activePage === 'preview' ? 'preview-visible' : ''}`}>
         <div className="invoice-container">
-          
           <header className="header">
             <div className="company-logo-area">
               <img src="/src/GalaLogo.PNG" alt="Gala Mining & Engineering logo" className="company-logo" />
@@ -1492,7 +1542,9 @@ function App() {
             </div>
             
             <div className="quote-title-area">
-              <h2 className="document-title">QUOTATION</h2>
+              <h2 className="document-title">
+                {pdfTemplateMode === 'time-report' ? 'TIME MANAGEMENT REPORT' : pdfTemplateMode === 'employee-report' ? 'EMPLOYEE REPORT' : 'QUOTATION'}
+              </h2>
               <p className="contact-info">
                 P O Box 3557, Brits, 0250<br/>
                 Tel: (012) 250 0111/3510<br/>
@@ -1504,77 +1556,155 @@ function App() {
             </div>
           </header>
 
-          <div className="meta-section">
-            <div className="meta-box">
-              <h3>QUOTATION TO</h3>
-              <div className="box-content">{quotationTo}</div>
-            </div>
-            <div className="quote-details-plain">
-              <div className="quote-details-inner">
-                <div className="details-table">
-                  <div className="row"><span className="label font-bold">Quotation Date:</span> <span className="val">{quotationDate}</span></div>
-                  <div className="row"><span className="label font-bold">Quotation Number:</span> <span className="val font-bold">{quotationNumber}</span></div>
-                  <div className="row"><span className="label">Purchase Order No:</span> <span className="val"></span></div>
-                  <div className="row"><span className="label">Reference Number:</span> <span className="val"></span></div>
-                  <div className="row"><span className="label">Terms:</span> <span className="val">Net 30</span></div>
-                  <div className="row"><span className="label">Customer VAT Reg. No:</span> <span className="val"></span></div>
+          {pdfTemplateMode === 'quote' ? (
+            <>
+              <div className="meta-section">
+                <div className="meta-box">
+                  <h3>QUOTATION TO</h3>
+                  <div className="box-content">{quotationTo}</div>
+                </div>
+                <div className="quote-details-plain">
+                  <div className="quote-details-inner">
+                    <div className="details-table">
+                      <div className="row"><span className="label font-bold">Quotation Date:</span> <span className="val">{quotationDate}</span></div>
+                      <div className="row"><span className="label font-bold">Quotation Number:</span> <span className="val font-bold">{quotationNumber}</span></div>
+                      <div className="row"><span className="label">Purchase Order No:</span> <span className="val"></span></div>
+                      <div className="row"><span className="label">Reference Number:</span> <span className="val"></span></div>
+                      <div className="row"><span className="label">Terms:</span> <span className="val">Net 30</span></div>
+                      <div className="row"><span className="label">Customer VAT Reg. No:</span> <span className="val"></span></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="meta-box">
+                  <h3>SHIPPING ADDRESS</h3>
+                  <div className="box-content">{shippingAddress}</div>
+                </div>
+                <div className="meta-box">
+                  <h3>DELIVERY INFORMATION</h3>
+                  <div className="box-content"></div>
                 </div>
               </div>
-            </div>
-            <div className="meta-box">
-              <h3>SHIPPING ADDRESS</h3>
-              <div className="box-content">{shippingAddress}</div>
-            </div>
-            <div className="meta-box">
-              <h3>DELIVERY INFORMATION</h3>
-              <div className="box-content"></div>
-            </div>
-          </div>
 
-          <table className="items-table">
-            <thead>
-              <tr>
-                <th style={{width: '8%'}}>QTY</th>
-                <th style={{width: '12%'}}>ITEM</th>
-                <th style={{width: '50%', textAlign: 'left'}}>DESCRIPTION</th>
-                <th style={{width: '15%', textAlign: 'right'}}>UNIT PRICE</th>
-                <th style={{width: '15%', textAlign: 'right'}}>LINE TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineItems.map((item) => (
-                <tr key={item.id}>
-                  <td className="text-center">{item.qty || ''}</td>
-                  <td>{item.item}</td>
-                  <td>
-                    <strong>{item.description}</strong>
-                  </td>
-                  <td className="text-right">R{parseFloat(item.unitPrice || 0).toFixed(2)}</td>
-                  <td className="text-right">R{calculateLineTotal(item.qty, item.unitPrice)}</td>
-                </tr>
-              ))}
-              <tr className="spacer-row"><td colSpan="5"></td></tr>
-            </tbody>
-          </table>
+              <table className="items-table">
+                <thead>
+                  <tr>
+                    <th style={{width: '8%'}}>QTY</th>
+                    <th style={{width: '12%'}}>ITEM</th>
+                    <th style={{width: '50%', textAlign: 'left'}}>DESCRIPTION</th>
+                    <th style={{width: '15%', textAlign: 'right'}}>UNIT PRICE</th>
+                    <th style={{width: '15%', textAlign: 'right'}}>LINE TOTAL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineItems.map((item) => (
+                    <tr key={item.id}>
+                      <td className="text-center">{item.qty || ''}</td>
+                      <td>{item.item}</td>
+                      <td>
+                        <strong>{item.description}</strong>
+                      </td>
+                      <td className="text-right">R{parseFloat(item.unitPrice || 0).toFixed(2)}</td>
+                      <td className="text-right">R{calculateLineTotal(item.qty, item.unitPrice)}</td>
+                    </tr>
+                  ))}
+                  <tr className="spacer-row"><td colSpan="5"></td></tr>
+                </tbody>
+              </table>
 
-          <footer className="footer-section">
-            <div className="notes-box">
-              <h4>Notes:</h4>
-              <ul>
-                <li>All Prices EXCLUDE 15% VAT</li>
-                <li>Prices are subject to market and rand currency fluctuations</li>
-                <li>All Goods supplied remain the property of Gala Mining & Engineering (Pty) Ltd until paid in full</li>
-              </ul>
-            </div>
-            
-            <div className="total-box-container">
-              <div className="total-box">
-                <span className="total-label">TOTAL PRICE:</span>
-                <span className="total-amount">R{parseFloat(calculateTotalPrice()).toFixed(2)}</span>
+              <footer className="footer-section">
+                <div className="notes-box">
+                  <h4>Notes:</h4>
+                  <ul>
+                    <li>All Prices EXCLUDE 15% VAT</li>
+                    <li>Prices are subject to market and rand currency fluctuations</li>
+                    <li>All Goods supplied remain the property of Gala Mining & Engineering (Pty) Ltd until paid in full</li>
+                  </ul>
+                </div>
+                
+                <div className="total-box-container">
+                  <div className="total-box">
+                    <span className="total-label">TOTAL PRICE:</span>
+                    <span className="total-amount">R{parseFloat(calculateTotalPrice()).toFixed(2)}</span>
+                  </div>
+                </div>
+              </footer>
+            </>
+          ) : (
+            <>
+              <div className="meta-section">
+                <div className="meta-box">
+                  <h3>{pdfTemplateMode === 'time-report' ? 'REPORT SUMMARY' : 'REPORT SUMMARY'}</h3>
+                  <div className="box-content">
+                    {pdfTemplateMode === 'time-report' ? `Generated: ${new Date().toLocaleString()}\nEntries: ${employeeHours.length + currentProjectHours.length + plannedProjectHours.length}` : `Generated: ${new Date().toLocaleString()}\nEmployees: ${employeeOptions.length}`}
+                  </div>
+                </div>
+                <div className="meta-box">
+                  <h3>{pdfTemplateMode === 'time-report' ? 'DETAILS' : 'DETAILS'}</h3>
+                  <div className="box-content">
+                    {pdfTemplateMode === 'time-report' ? `Employee hours: ${employeeHours.length}\nCurrent project hours: ${currentProjectHours.length}\nPlanned project hours: ${plannedProjectHours.length}` : `Roles: ${employeeOptions.filter((employee) => employee.role).length}`}
+                  </div>
+                </div>
               </div>
-            </div>
-          </footer>
 
+              <table className="items-table">
+                <thead>
+                  <tr>
+                    <th style={{width: '25%'}}>{pdfTemplateMode === 'time-report' ? 'SECTION' : 'NAME'}</th>
+                    <th style={{width: '25%'}}>{pdfTemplateMode === 'time-report' ? 'ITEM' : 'ROLE'}</th>
+                    <th style={{width: '30%', textAlign: 'left'}}>{pdfTemplateMode === 'time-report' ? 'DETAILS' : 'DEPARTMENT'}</th>
+                    <th style={{width: '20%', textAlign: 'right'}}>{pdfTemplateMode === 'time-report' ? 'VALUE' : 'EMAIL'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pdfTemplateMode === 'time-report' ? (
+                    <>
+                      {employeeHours.slice(0, 8).map((entry) => (
+                        <tr key={`emp-${entry.id}`}>
+                          <td>Employee Hours</td>
+                          <td>{entry.name || 'Unknown'}</td>
+                          <td>{entry.date || '-'}</td>
+                          <td className="text-right">{entry.timeIn || '-'} - {entry.timeOut || '-'}</td>
+                        </tr>
+                      ))}
+                      {currentProjectHours.slice(0, 8).map((entry) => (
+                        <tr key={`current-${entry.id}`}>
+                          <td>Current Project</td>
+                          <td>{entry.name || 'Unknown'}</td>
+                          <td>{entry.project || '-'}</td>
+                          <td className="text-right">{entry.hours || '-'}</td>
+                        </tr>
+                      ))}
+                      {plannedProjectHours.slice(0, 8).map((entry) => (
+                        <tr key={`planned-${entry.id}`}>
+                          <td>Planned Project</td>
+                          <td>{entry.name || 'Unknown'}</td>
+                          <td>{entry.project || '-'}</td>
+                          <td className="text-right">{entry.hours || '-'}</td>
+                        </tr>
+                      ))}
+                      {timeLogEntries.slice(0, 8).map((entry) => (
+                        <tr key={`log-${entry.id}`}>
+                          <td>Activity Log</td>
+                          <td>{entry.action || 'Action'}</td>
+                          <td>{entry.section || '-'}</td>
+                          <td className="text-right">{entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '-'}</td>
+                        </tr>
+                      ))}
+                    </>
+                  ) : (
+                    employeeOptions.map((employee) => (
+                      <tr key={employee.id}>
+                        <td>{employee.name || 'Unknown'}</td>
+                        <td>{employee.role || '-'}</td>
+                        <td>{employee.department || '-'}</td>
+                        <td className="text-right">{employee.email || '-'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </>
+          )}
         </div>
       </div>
     </div>
