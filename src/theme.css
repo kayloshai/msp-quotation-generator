@@ -1,0 +1,82 @@
+/*
+  Central color scheme for the app.
+  Change a value here to re-theme every component and the PDF template.
+*/
+:root {
+  /* ---- Brand green ---- */
+  --color-primary: #4caf50;
+  --color-primary-hover: #45a049;
+  --color-primary-light: #8fe09d;
+  --color-primary-tint: #e8f7eb;
+  --color-primary-tint-2: #eff8f0;
+  --color-primary-deep: #103822;
+
+  /* ---- Green text shades (headings/emphasis on light backgrounds) ---- */
+  --color-green-900: #173f26;
+  --color-green-800: #1e5c33;
+  --color-green-700: #213c2d;
+  --color-green-650: #243b2f;
+  --color-green-600: #245436;
+  --color-green-550: #2b5337;
+  --color-green-500: #2c4b35;
+  --color-green-450: #2e6b39;
+  --color-green-400: #355543;
+
+  /* ---- Muted green-grey text ---- */
+  --color-text-muted-green: #6b7b6f;
+  --color-text-muted-green-2: #71967c;
+  --color-text-copy: #5e7164;
+
+  /* ---- Surfaces ---- */
+  --color-white: #ffffff;
+  --color-surface-tint: #f7fcf8;
+  --color-surface-muted: #f5f5f5;
+  --color-surface-alt: #fafafa;
+  --color-surface-alt-2: #f0f0f0;
+  --color-surface-pdf: #f8f8f8;
+  --color-row-highlight: #eef7ef;
+  --color-notes-bg: #c8e6c9;
+
+  /* ---- Borders ---- */
+  --color-border: #dddddd;
+  --color-border-light: #eeeeee;
+  --color-border-dark: #d9d9d9;
+  --color-border-tint: #e4efe7;
+
+  /* ---- Neutral text ---- */
+  --color-text: #333333;
+  --color-text-muted: #666666;
+  --color-text-faint: #999999;
+  --color-text-subtle: #555555;
+
+  /* ---- Semantic ---- */
+  --color-danger: #f44336;
+  --color-danger-hover: #d32f2f;
+  --color-disabled: #cccccc;
+  --color-info: #1976d2;
+
+  /* ---- Overlays / shadows ---- */
+  --shadow-card: rgba(16, 56, 34, 0.08);
+  --overlay-bg: rgba(0, 0, 0, 0.45);
+  --overlay-shadow: rgba(0, 0, 0, 0.25);
+  --focus-ring: rgba(76, 175, 80, 0.3);
+  --focus-ring-light: rgba(76, 175, 80, 0.2);
+
+  /* ---- Sidebar (dark surface) ---- */
+  --sidebar-bg: var(--color-primary-deep);
+  --sidebar-text: var(--color-white);
+  --sidebar-text-muted: rgba(255, 255, 255, 0.8);
+  --sidebar-item-bg: rgba(255, 255, 255, 0.08);
+  --sidebar-item-ring: rgba(255, 255, 255, 0.16);
+  --sidebar-card-bg: rgba(255, 255, 255, 0.1);
+  --sidebar-card-border: rgba(255, 255, 255, 0.12);
+  --sidebar-card-text: rgba(255, 255, 255, 0.78);
+
+  /* ---- App background gradient ---- */
+  --app-bg-start: #f8faf9;
+  --app-bg-end: #eef4f0;
+
+  /* ---- Link animation ---- */
+  --color-link: #646cff;
+  --color-link-alt: #9c39ff;
+}

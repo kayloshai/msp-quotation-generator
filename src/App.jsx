@@ -5,9 +5,11 @@ import './App.css'
 import vendorData from '../vendor.json'
 import timeManagementData from './time-management-data.json'
 import employeeData from './employee.json'
+import labourPricesData from '../labour-prices.json'
+import materialPricesData from '../material-prices.json'
 
 const vendorOptions = vendorData?.vendors || []
-const validPages = ['builder', 'history', 'preview', 'time-management', 'employee-management']
+const validPages = ['builder', 'history', 'preview', 'time-management', 'employee-management', 'price-calculator']
 
 const normalizePageKey = (page) => {
   if (page === 'time') {
@@ -153,6 +155,34 @@ function App() {
   const [employeeManagementStatus, setEmployeeManagementStatus] = useState('Manage employees and keep the roster current.')
   const [editingCurrentProjectId, setEditingCurrentProjectId] = useState(null)
   const [editingPlannedProjectId, setEditingPlannedProjectId] = useState(null)
+  const [labourPrices, setLabourPrices] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedData = localStorage.getItem('labour-prices-data')
+        if (savedData) {
+          const parsed = JSON.parse(savedData).labourPrices || []
+          if (parsed.length > 0 && parsed[0].normalHourlyRate) {
+            return parsed
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load saved labour prices', error)
+      }
+    }
+    return labourPricesData?.labourPrices || []
+  })
+  const [editingLabourId, setEditingLabourId] = useState(null)
+  const [labourFormData, setLabourFormData] = useState({ title: '', normalHourlyRate: '', onsiteHourlyRate: '', breakdownHourlyRate: '' })
+  const [priceCalculatorStatus, setPriceCalculatorStatus] = useState('Manage labour pricing rates.')
+  const [priceCalculatorOpen, setPriceCalculatorOpen] = useState(false)
+  const [materialManagementStatus, setMaterialManagementStatus] = useState('Manage material pricing.')
+  const [materialManagementOpen, setMaterialManagementOpen] = useState(false)
+  const [plates, setPlates] = useState(materialPricesData?.materials?.plates || [])
+  const [selectedPlate, setSelectedPlate] = useState(plates[0]?.id || null)
+  const [angleIron, setAngleIron] = useState(materialPricesData?.materials?.angleIron || [])
+  const [selectedAngleIron, setSelectedAngleIron] = useState(angleIron[0]?.id || null)
+  const [linerPlates, setLinerPlates] = useState(materialPricesData?.materials?.linerPlates || [])
+  const [selectedLinerPlate, setSelectedLinerPlate] = useState(linerPlates[0]?.id || null)
   const [lineItems, setLineItems] = useState([
     { id: 1, qty: '', item: 'manufacture', description: '', unitPrice: '' }
   ])
@@ -508,6 +538,41 @@ function App() {
     }
   }
 
+  const calculateDailyTotal = (hourlyRate, hours) => {
+    return parseFloat((hourlyRate * hours).toFixed(0))
+  }
+
+  const updateLabourPrice = (id, field, value) => {
+    const updatedPrices = labourPrices.map((price) => {
+      if (price.id === id) {
+        return { ...price, [field]: field === 'title' ? value : parseFloat(value) || 0 }
+      }
+      return price
+    })
+    setLabourPrices(updatedPrices)
+  }
+
+  const startEditingLabour = (labour) => {
+    setEditingLabourId(labour.id)
+    setLabourFormData({
+      title: labour.title,
+      normalHourlyRate: labour.normalHourlyRate,
+      onsiteHourlyRate: labour.onsiteHourlyRate,
+      breakdownHourlyRate: labour.breakdownHourlyRate
+    })
+  }
+
+  const resetLabourForm = () => {
+    setLabourFormData({ title: '', normalHourlyRate: '', onsiteHourlyRate: '', breakdownHourlyRate: '' })
+    setEditingLabourId(null)
+  }
+
+  const saveLabourPrices = () => {
+    const payload = { generatedAt: new Date().toISOString(), labourPrices }
+    localStorage.setItem('labour-prices-data', JSON.stringify(payload))
+    setPriceCalculatorStatus('Labour prices saved locally.')
+  }
+
   const savePanelToJson = async () => {
     const payload = {
       description: panelDescription,
@@ -577,6 +642,11 @@ function App() {
 
     if (activePage === 'employee-management') {
       await generateReportPDF('employee-report', 'employee-report.pdf')
+      return
+    }
+
+    if (activePage === 'price-calculator') {
+      await generateReportPDF('price-report', 'labour-rates-report.pdf')
       return
     }
 
@@ -823,6 +893,14 @@ function App() {
             <span className="nav-icon">👥</span>
             Employee Management
           </button>
+          <button
+            type="button"
+            className={`nav-item ${activePage === 'price-calculator' ? 'active' : ''}`}
+            onClick={() => setActivePage('price-calculator')}
+          >
+            <span className="nav-icon">💰</span>
+            Price Calculator
+          </button>
         </nav>
 
         <div className="sidebar-card">
@@ -840,7 +918,7 @@ function App() {
         <header className="app-header">
           <div>
             <p className="eyebrow">Multi-page workspace</p>
-            <h1>{activePage === 'builder' ? 'Quote builder' : activePage === 'history' ? 'Quotation history' : activePage === 'time-management' ? 'Time management' : 'PDF preview'}</h1>
+            <h1>{activePage === 'builder' ? 'Quote builder' : activePage === 'history' ? 'Quotation history' : activePage === 'time-management' ? 'Time management' : activePage === 'employee-management' ? 'Employee management' : activePage === 'price-calculator' ? 'Price calculator' : 'PDF preview'}</h1>
           </div>
           <div className="header-actions">
             <button type="button" className="btn-secondary" onClick={() => setActivePage('history')}>
@@ -858,6 +936,29 @@ function App() {
               <button className="btn-generate" onClick={handleHeaderExport}>
                 Download report
               </button>
+            )}
+            {activePage === 'price-calculator' && (
+              <>
+                <button className="btn-generate" onClick={handleHeaderExport}>
+                  Download PDF
+                </button>
+                <button
+                  type="button"
+                  className="btn-generate"
+                  onClick={() => setPriceCalculatorOpen(!priceCalculatorOpen)}
+                >
+                  {priceCalculatorOpen ? 'Hide' : 'Manage'} rates
+                </button>
+                {priceCalculatorOpen && <span className="status-badge">{priceCalculatorStatus}</span>}
+                <button
+                  type="button"
+                  className="btn-generate"
+                  onClick={() => setMaterialManagementOpen(!materialManagementOpen)}
+                >
+                  {materialManagementOpen ? 'Hide' : 'Manage'} material
+                </button>
+                {materialManagementOpen && <span className="status-badge">{materialManagementStatus}</span>}
+              </>
             )}
           </div>
         </header>
@@ -1197,6 +1298,278 @@ function App() {
                 )}
               </section>
             </div>
+          </section>
+        )}
+
+        {activePage === 'price-calculator' && (
+          <section className="page-card">
+            <div className="page-header">
+              <div>
+                <p className="section-kicker">Calculator</p>
+                <h2>Price calculator</h2>
+              </div>
+              <span className="page-badge">Tools</span>
+            </div>
+
+            {priceCalculatorOpen && (
+            <div className="price-calculator-grid">
+              <section className="price-editor-card">
+                <div className="price-card-header">
+                  <h3>{editingLabourId ? 'Edit labour rate' : 'Labour rates'}</h3>
+                  {editingLabourId ? (
+                    <button type="button" className="btn-secondary" onClick={resetLabourForm}>Cancel</button>
+                  ) : null}
+                </div>
+
+                <div className="price-table-redesigned">
+                  {labourPrices.map((labour) => (
+                    <div key={labour.id} className="price-card-row">
+                      <div className="price-card-header">
+                        <h4>{labour.title}</h4>
+                        <button type="button" className="btn-secondary" onClick={() => startEditingLabour(labour)}>Edit</button>
+                      </div>
+                      <div className="price-card-grid">
+                        <div className="price-rate-group">
+                          <div className="rate-label">Workshop / Normal</div>
+                          <div className="rate-hourly">R{labour.normalHourlyRate || 0}/hr</div>
+                          <div className="rate-daily">
+                            <span className="daily-item">7.5h: R{labour.normalDaily7 || calculateDailyTotal(labour.normalHourlyRate, 7.5)}</span>
+                            <span className="daily-item">11.5h: R{labour.normalDaily11 || calculateDailyTotal(labour.normalHourlyRate, 11.5)}</span>
+                          </div>
+                        </div>
+                        <div className="price-rate-group">
+                          <div className="rate-label">Onsite (Mine)</div>
+                          <div className="rate-hourly">R{labour.onsiteHourlyRate || 0}/hr</div>
+                          <div className="rate-daily">
+                            <span className="daily-item">7.5h: R{labour.onsiteDaily7 || calculateDailyTotal(labour.onsiteHourlyRate, 7.5)}</span>
+                            <span className="daily-item">11.5h: R{labour.onsiteDaily11 || calculateDailyTotal(labour.onsiteHourlyRate, 11.5)}</span>
+                          </div>
+                        </div>
+                        <div className="price-rate-group">
+                          <div className="rate-label">Breakdown (Out of Hours)</div>
+                          <div className="rate-hourly breakdown-rate">R{labour.breakdownHourlyRate || 0}/hr</div>
+                          <div className="rate-daily">
+                            <span className="daily-item">7.5h: R{labour.breakdownDaily7 || calculateDailyTotal(labour.breakdownHourlyRate, 7.5)}</span>
+                            <span className="daily-item">11.5h: R{labour.breakdownDaily11 || calculateDailyTotal(labour.breakdownHourlyRate, 11.5)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      {editingLabourId === labour.id && (
+                        <div className="price-editor-panel">
+                          <div className="price-editor-grid">
+                            <label>
+                              <span>Category</span>
+                              <input
+                                type="text"
+                                value={labourFormData.title}
+                                onChange={(e) => setLabourFormData({ ...labourFormData, title: e.target.value })}
+                                placeholder="Category"
+                              />
+                            </label>
+                            <label>
+                              <span>Normal Hours (R)</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="10"
+                                value={labourFormData.normalHourlyRate}
+                                onChange={(e) => {
+                                  const rate = parseFloat(e.target.value) || 0
+                                  setLabourFormData({ ...labourFormData, normalHourlyRate: rate })
+                                  updateLabourPrice(labour.id, 'normalHourlyRate', rate)
+                                }}
+                                placeholder="0"
+                              />
+                            </label>
+                            <label>
+                              <span>Onsite Hours (R)</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="10"
+                                value={labourFormData.onsiteHourlyRate}
+                                onChange={(e) => {
+                                  const rate = parseFloat(e.target.value) || 0
+                                  setLabourFormData({ ...labourFormData, onsiteHourlyRate: rate })
+                                  updateLabourPrice(labour.id, 'onsiteHourlyRate', rate)
+                                }}
+                                placeholder="0"
+                              />
+                            </label>
+                            <label>
+                              <span>Breakdown Hours (R)</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="10"
+                                value={labourFormData.breakdownHourlyRate}
+                                onChange={(e) => {
+                                  const rate = parseFloat(e.target.value) || 0
+                                  setLabourFormData({ ...labourFormData, breakdownHourlyRate: rate })
+                                  updateLabourPrice(labour.id, 'breakdownHourlyRate', rate)
+                                }}
+                                placeholder="0"
+                              />
+                            </label>
+                          </div>
+                          <div className="price-breakdown">
+                            <div className="breakdown-item">
+                              <span>Normal Hours (7.5 hrs)</span>
+                              <strong>R{calculateDailyTotal(labourFormData.normalHourlyRate, labour.normalHours)}</strong>
+                            </div>
+                            <div className="breakdown-item">
+                              <span>Mine Hours (11.5 hrs)</span>
+                              <strong>R{calculateDailyTotal(labourFormData.normalHourlyRate, labour.mineHours)}</strong>
+                            </div>
+                          </div>
+                          <div className="price-editor-actions">
+                            <button type="button" className="btn-secondary" onClick={() => {
+                              updateLabourPrice(labour.id, 'title', labourFormData.title)
+                              resetLabourForm()
+                            }}>Done</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="price-form-actions">
+                  <button type="button" className="btn-add" onClick={saveLabourPrices}>Save prices</button>
+                </div>
+              </section>
+
+              <section className="price-summary-card">
+                <h3>Rate summary</h3>
+                <div className="summary-stats">
+                  <div className="summary-stat">
+                    <span>Total labour categories</span>
+                    <strong>{labourPrices.length}</strong>
+                  </div>
+                  <div className="summary-stat">
+                    <span>Highest normal rate</span>
+                    <strong>R{Math.max(...labourPrices.map(l => l.normalHourlyRate))}</strong>
+                  </div>
+                  <div className="summary-stat">
+                    <span>Lowest normal rate</span>
+                    <strong>R{Math.min(...labourPrices.map(l => l.normalHourlyRate))}</strong>
+                  </div>
+                  <div className="summary-stat">
+                    <span>Average normal rate</span>
+                    <strong>R{Math.round(labourPrices.reduce((sum, l) => sum + l.normalHourlyRate, 0) / labourPrices.length)}</strong>
+                  </div>
+                </div>
+              </section>
+            </div>
+            )}
+
+            {materialManagementOpen && (
+            <div className="material-management-grid">
+              <section className="material-card">
+                <div className="material-card-header">
+                  <h3>Plates</h3>
+                </div>
+                <div className="material-content">
+                  <label className="material-select-label">
+                    <span>Select plate:</span>
+                    <select value={selectedPlate} onChange={(e) => setSelectedPlate(Number(e.target.value))}>
+                      {plates.map((item) => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedPlate && (
+                    <div className="material-price-display">
+                      <span className="material-name">{plates.find(p => p.id === selectedPlate)?.name}</span>
+                      <span className="material-price">R{plates.find(p => p.id === selectedPlate)?.price}</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="material-card">
+                <div className="material-card-header">
+                  <h3>Angle Iron / Flat Bar</h3>
+                </div>
+                <div className="material-content">
+                  <label className="material-select-label">
+                    <span>Select angle iron:</span>
+                    <select value={selectedAngleIron} onChange={(e) => setSelectedAngleIron(Number(e.target.value))}>
+                      {angleIron.map((item) => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedAngleIron && (
+                    <div className="material-price-display">
+                      <span className="material-name">{angleIron.find(a => a.id === selectedAngleIron)?.name}</span>
+                      <span className="material-price">R{angleIron.find(a => a.id === selectedAngleIron)?.price}</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="material-card">
+                <div className="material-card-header">
+                  <h3>Liner Plates</h3>
+                </div>
+                <div className="material-content">
+                  <label className="material-select-label">
+                    <span>Select liner plate:</span>
+                    <select value={selectedLinerPlate} onChange={(e) => setSelectedLinerPlate(Number(e.target.value))}>
+                      {linerPlates.map((item) => (
+                        <option key={item.id} value={item.id}>{item.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {selectedLinerPlate && (
+                    <div className="material-price-display">
+                      <span className="material-name">{linerPlates.find(l => l.id === selectedLinerPlate)?.name}</span>
+                      <span className="material-price">R{linerPlates.find(l => l.id === selectedLinerPlate)?.price}</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <footer className="material-suppliers-footer">
+                <h4>Top Suppliers</h4>
+                <div className="suppliers-grid">
+                  <a href="https://www.metalmotionsa.co.za/" target="_blank" rel="noopener noreferrer" className="supplier-link">
+                    <span className="supplier-name">Metal Motion SA</span>
+                    <span className="supplier-type">Mild Steel Plates</span>
+                  </a>
+                  <a href="https://shop.macsteel.co.za/" target="_blank" rel="noopener noreferrer" className="supplier-link">
+                    <span className="supplier-name">Macsteel</span>
+                    <span className="supplier-type">Angle Iron, VRN Liner Plates</span>
+                  </a>
+                  <a href="https://leongjin.co.za/" target="_blank" rel="noopener noreferrer" className="supplier-link">
+                    <span className="supplier-name">Leong Jin Africa</span>
+                    <span className="supplier-type">NM Series Liner Plates</span>
+                  </a>
+                  <a href="https://asapsteel.shop/" target="_blank" rel="noopener noreferrer" className="supplier-link">
+                    <span className="supplier-name">ASAP Steel</span>
+                    <span className="supplier-type">Mild Steel & Angle Iron</span>
+                  </a>
+                  <a href="https://steelonline.co.za/" target="_blank" rel="noopener noreferrer" className="supplier-link">
+                    <span className="supplier-name">SteelOnline</span>
+                    <span className="supplier-type">Mild Steel Plates</span>
+                  </a>
+                  <a href="https://www.steelpipesforafrica.co.za/" target="_blank" rel="noopener noreferrer" className="supplier-link">
+                    <span className="supplier-name">Steel & Pipes for Africa</span>
+                    <span className="supplier-type">Mild Steel & Angle Iron</span>
+                  </a>
+                  <a href="https://www.bsisteel.co.za/" target="_blank" rel="noopener noreferrer" className="supplier-link">
+                    <span className="supplier-name">BSi Steel</span>
+                    <span className="supplier-type">Mild Steel Plates</span>
+                  </a>
+                  <a href="https://www.steeloxsa.co.za/" target="_blank" rel="noopener noreferrer" className="supplier-link">
+                    <span className="supplier-name">Steelox SA</span>
+                    <span className="supplier-type">Specialized Steel Products</span>
+                  </a>
+                </div>
+              </footer>
+            </div>
+            )}
           </section>
         )}
 
@@ -1543,7 +1916,7 @@ function App() {
             
             <div className="quote-title-area">
               <h2 className="document-title">
-                {pdfTemplateMode === 'time-report' ? 'TIME MANAGEMENT REPORT' : pdfTemplateMode === 'employee-report' ? 'EMPLOYEE REPORT' : 'QUOTATION'}
+                {pdfTemplateMode === 'time-report' ? 'TIME MANAGEMENT REPORT' : pdfTemplateMode === 'employee-report' ? 'EMPLOYEE REPORT' : pdfTemplateMode === 'price-report' ? 'LABOUR RATES REPORT' : 'QUOTATION'}
               </h2>
               <p className="contact-info">
                 P O Box 3557, Brits, 0250<br/>
@@ -1633,15 +2006,15 @@ function App() {
             <>
               <div className="meta-section">
                 <div className="meta-box">
-                  <h3>{pdfTemplateMode === 'time-report' ? 'REPORT SUMMARY' : 'REPORT SUMMARY'}</h3>
+                  <h3>REPORT SUMMARY</h3>
                   <div className="box-content">
-                    {pdfTemplateMode === 'time-report' ? `Generated: ${new Date().toLocaleString()}\nEntries: ${employeeHours.length + currentProjectHours.length + plannedProjectHours.length}` : `Generated: ${new Date().toLocaleString()}\nEmployees: ${employeeOptions.length}`}
+                    {pdfTemplateMode === 'time-report' ? `Generated: ${new Date().toLocaleString()}\nEntries: ${employeeHours.length + currentProjectHours.length + plannedProjectHours.length}` : pdfTemplateMode === 'employee-report' ? `Generated: ${new Date().toLocaleString()}\nEmployees: ${employeeOptions.length}` : `Generated: ${new Date().toLocaleString()}\nLabour Categories: ${labourPrices.length}`}
                   </div>
                 </div>
                 <div className="meta-box">
-                  <h3>{pdfTemplateMode === 'time-report' ? 'DETAILS' : 'DETAILS'}</h3>
+                  <h3>DETAILS</h3>
                   <div className="box-content">
-                    {pdfTemplateMode === 'time-report' ? `Employee hours: ${employeeHours.length}\nCurrent project hours: ${currentProjectHours.length}\nPlanned project hours: ${plannedProjectHours.length}` : `Roles: ${employeeOptions.filter((employee) => employee.role).length}`}
+                    {pdfTemplateMode === 'time-report' ? `Employee hours: ${employeeHours.length}\nCurrent project hours: ${currentProjectHours.length}\nPlanned project hours: ${plannedProjectHours.length}` : pdfTemplateMode === 'employee-report' ? `Roles: ${employeeOptions.filter((employee) => employee.role).length}` : `Normal Rate Range: R${Math.min(...labourPrices.map(l => l.normalHourlyRate))} - R${Math.max(...labourPrices.map(l => l.normalHourlyRate))}`}
                   </div>
                 </div>
               </div>
@@ -1649,14 +2022,50 @@ function App() {
               <table className="items-table">
                 <thead>
                   <tr>
-                    <th style={{width: '25%'}}>{pdfTemplateMode === 'time-report' ? 'SECTION' : 'NAME'}</th>
-                    <th style={{width: '25%'}}>{pdfTemplateMode === 'time-report' ? 'ITEM' : 'ROLE'}</th>
-                    <th style={{width: '30%', textAlign: 'left'}}>{pdfTemplateMode === 'time-report' ? 'DETAILS' : 'DEPARTMENT'}</th>
-                    <th style={{width: '20%', textAlign: 'right'}}>{pdfTemplateMode === 'time-report' ? 'VALUE' : 'EMAIL'}</th>
+                    {pdfTemplateMode === 'price-report' ? (
+                      <>
+                        <th style={{width: '20%'}}>CATEGORY</th>
+                        <th style={{width: '15%'}}>FEE TYPE</th>
+                        <th style={{width: '15%', textAlign: 'right'}}>HOURLY RATE</th>
+                        <th style={{width: '15%', textAlign: 'right'}}>DAILY (7.5h)</th>
+                        <th style={{width: '20%', textAlign: 'right'}}>DAILY (11.5h)</th>
+                      </>
+                    ) : (
+                      <>
+                        <th style={{width: '25%'}}>{pdfTemplateMode === 'time-report' ? 'SECTION' : 'NAME'}</th>
+                        <th style={{width: '25%'}}>{pdfTemplateMode === 'time-report' ? 'ITEM' : 'ROLE'}</th>
+                        <th style={{width: '30%', textAlign: 'left'}}>{pdfTemplateMode === 'time-report' ? 'DETAILS' : 'DEPARTMENT'}</th>
+                        <th style={{width: '20%', textAlign: 'right'}}>{pdfTemplateMode === 'time-report' ? 'VALUE' : 'EMAIL'}</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {pdfTemplateMode === 'time-report' ? (
+                  {pdfTemplateMode === 'price-report' ? (
+                    labourPrices.map((labour, idx) => [
+                      <tr key={`${labour.id}-normal`}>
+                        <td>{idx === 0 ? labour.title : idx === labourPrices.indexOf(labour) ? labour.title : ''}</td>
+                        <td>Normal</td>
+                        <td className="text-right">R{labour.normalHourlyRate}</td>
+                        <td className="text-right">R{labour.normalDaily7 || calculateDailyTotal(labour.normalHourlyRate, 7.5)}</td>
+                        <td className="text-right">R{labour.normalDaily11 || calculateDailyTotal(labour.normalHourlyRate, 11.5)}</td>
+                      </tr>,
+                      <tr key={`${labour.id}-onsite`}>
+                        <td></td>
+                        <td>Onsite (Mine)</td>
+                        <td className="text-right">R{labour.onsiteHourlyRate}</td>
+                        <td className="text-right">R{labour.onsiteDaily7 || calculateDailyTotal(labour.onsiteHourlyRate, 7.5)}</td>
+                        <td className="text-right">R{labour.onsiteDaily11 || calculateDailyTotal(labour.onsiteHourlyRate, 11.5)}</td>
+                      </tr>,
+                      <tr key={`${labour.id}-breakdown`}>
+                        <td></td>
+                        <td>Breaktime (Out of Hrs)</td>
+                        <td className="text-right">R{labour.breakdownHourlyRate}</td>
+                        <td className="text-right">R{labour.breakdownDaily7 || calculateDailyTotal(labour.breakdownHourlyRate, 7.5)}</td>
+                        <td className="text-right">R{labour.breakdownDaily11 || calculateDailyTotal(labour.breakdownHourlyRate, 11.5)}</td>
+                      </tr>
+                    ]).flat()
+                  ) : pdfTemplateMode === 'time-report' ? (
                     <>
                       {employeeHours.slice(0, 8).map((entry) => (
                         <tr key={`emp-${entry.id}`}>

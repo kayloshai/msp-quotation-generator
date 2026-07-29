@@ -1,0 +1,65 @@
+{
+  "generatedAt": "2026-07-29T00:00:00.000Z",
+  "materials": {
+    "plates": [
+      {
+        "id": 1,
+        "name": "Mild steel 2500 x 1200 x 12 mm",
+        "price": 6281.60
+      },
+      {
+        "id": 2,
+        "name": "Mild steel 2500 x 1200 x 16 mm",
+        "price": 8834.40
+      },
+      {
+        "id": 3,
+        "name": "Mild steel 2500 x 1200 x 20 mm",
+        "price": 10390.98
+      }
+    ],
+    "angleIron": [
+      {
+        "id": 1,
+        "name": "Angle iron 50 x 50 x 6 mm (6m)",
+        "price": 678.60
+      },
+      {
+        "id": 2,
+        "name": "Angle iron 75 x 75 x 8 mm (6m)",
+        "price": 1530
+      },
+      {
+        "id": 3,
+        "name": "Angle iron 100 x 100 x 10 mm (6m)",
+        "price": 2248.80
+      }
+    ],
+    "linerPlates": [
+      {
+        "id": 1,
+        "name": "VRN450",
+        "price": 8500,
+        "note": "Contact supplier for current quote"
+      },
+      {
+        "id": 2,
+        "name": "VRN500",
+        "price": 10200,
+        "note": "Contact supplier for current quote"
+      },
+      {
+        "id": 3,
+        "name": "NM450",
+        "price": 7800,
+        "note": "Contact supplier for current quote"
+      },
+      {
+        "id": 4,
+        "name": "NM500",
+        "price": 9400,
+        "note": "Contact supplier for current quote"
+      }
+    ]
+  }
+}
