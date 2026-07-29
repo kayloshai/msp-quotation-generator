@@ -3,8 +3,41 @@ import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import './App.css'
 import vendorData from '../vendor.json'
+import timeManagementData from './time-management-data.json'
+import employeeData from './employee.json'
 
 const vendorOptions = vendorData?.vendors || []
+const validPages = ['builder', 'history', 'preview', 'time-management', 'employee-management']
+
+const normalizePageKey = (page) => {
+  if (page === 'time') {
+    return 'time-management'
+  }
+
+  return validPages.includes(page) ? page : 'builder'
+}
+
+const getInitialActivePage = () => {
+  if (typeof window === 'undefined') {
+    return 'builder'
+  }
+
+  try {
+    const savedPage = localStorage.getItem('active-page')
+    return normalizePageKey(savedPage)
+  } catch (error) {
+    console.error('Failed to load saved page state', error)
+    return 'builder'
+  }
+}
+
+const initialTimeManagementData = timeManagementData || {}
+const initialTimeManagementState = {
+  employeeHours: initialTimeManagementData.employeeHours || [],
+  currentProjectHours: initialTimeManagementData.currentProjectHours || [],
+  plannedProjectHours: initialTimeManagementData.plannedProjectHours || [],
+  activityLog: initialTimeManagementData.activityLog || []
+}
 
 function App() {
   const quotationRef = useRef()
@@ -22,6 +55,103 @@ function App() {
   const [quotationHistory, setQuotationHistory] = useState([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [selectedHistoryQuote, setSelectedHistoryQuote] = useState(null)
+  const [activePage, setActivePage] = useState(getInitialActivePage)
+  const [timeEntries, setTimeEntries] = useState([
+    { id: 1, title: 'Review client quote', date: '2026-07-29', hours: '2.5', status: 'Planned' },
+    { id: 2, title: 'Site coordination call', date: '2026-07-30', hours: '1.0', status: 'In progress' }
+  ])
+  const [employeeHours, setEmployeeHours] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedData = localStorage.getItem('time-management-data')
+        if (savedData) {
+          const parsed = JSON.parse(savedData)
+          if (Array.isArray(parsed.employeeHours)) {
+            return parsed.employeeHours
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load saved time management data', error)
+      }
+    }
+
+    return initialTimeManagementState.employeeHours
+  })
+  const [currentProjectHours, setCurrentProjectHours] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedData = localStorage.getItem('time-management-data')
+        if (savedData) {
+          const parsed = JSON.parse(savedData)
+          if (Array.isArray(parsed.currentProjectHours)) {
+            return parsed.currentProjectHours
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load saved time management data', error)
+      }
+    }
+
+    return initialTimeManagementState.currentProjectHours
+  })
+  const [plannedProjectHours, setPlannedProjectHours] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedData = localStorage.getItem('time-management-data')
+        if (savedData) {
+          const parsed = JSON.parse(savedData)
+          if (Array.isArray(parsed.plannedProjectHours)) {
+            return parsed.plannedProjectHours
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load saved time management data', error)
+      }
+    }
+
+    return initialTimeManagementState.plannedProjectHours
+  })
+  const [timeLogEntries, setTimeLogEntries] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedData = localStorage.getItem('time-management-data')
+        if (savedData) {
+          const parsed = JSON.parse(savedData)
+          if (Array.isArray(parsed.activityLog)) {
+            return parsed.activityLog
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load saved time management activity log', error)
+      }
+    }
+
+    return initialTimeManagementState.activityLog
+  })
+  const [timeLogStatus, setTimeLogStatus] = useState('Auto-saving changes locally.')
+  const [employeeOptions, setEmployeeOptions] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedEmployees = localStorage.getItem('employee-management-data')
+        if (savedEmployees) {
+          return JSON.parse(savedEmployees)
+        }
+      } catch (error) {
+        console.error('Failed to load saved employees', error)
+      }
+    }
+
+    return employeeData?.employees || []
+  })
+  const [employeeForm, setEmployeeForm] = useState({ name: '', date: '', timeIn: '', timeOut: '' })
+  const [currentProjectForm, setCurrentProjectForm] = useState({ name: '', hours: '', project: '' })
+  const [plannedProjectForm, setPlannedProjectForm] = useState({ name: '', hours: '', project: '' })
+  const [employeeManagementForm, setEmployeeManagementForm] = useState({ name: '', role: '', department: '', email: '', phone: '' })
+  const [editingEmployeeId, setEditingEmployeeId] = useState(null)
+  const [editingEmployeeManagementId, setEditingEmployeeManagementId] = useState(null)
+  const [employeeManagementStatus, setEmployeeManagementStatus] = useState('Manage employees and keep the roster current.')
+  const [editingCurrentProjectId, setEditingCurrentProjectId] = useState(null)
+  const [editingPlannedProjectId, setEditingPlannedProjectId] = useState(null)
   const [lineItems, setLineItems] = useState([
     { id: 1, qty: '', item: 'manufacture', description: '', unitPrice: '' }
   ])
@@ -56,6 +186,43 @@ function App() {
       console.error('Failed to load quotation history', error)
     }
   }, [])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('active-page', normalizePageKey(activePage))
+    }
+  }, [activePage])
+
+  const hasHydratedTimeManagementRef = useRef(false)
+
+  const persistTimeManagementData = (payload) => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('time-management-data', JSON.stringify(payload))
+        setTimeLogStatus('Auto-saved time-management changes locally.')
+      }
+    } catch (error) {
+      console.error('Unable to save time management data', error)
+      setTimeLogStatus('Auto-save failed.')
+    }
+  }
+
+  useEffect(() => {
+    if (!hasHydratedTimeManagementRef.current) {
+      hasHydratedTimeManagementRef.current = true
+      return
+    }
+
+    const payload = {
+      employeeHours,
+      currentProjectHours,
+      plannedProjectHours,
+      activityLog: timeLogEntries,
+      updatedAt: new Date().toISOString()
+    }
+
+    persistTimeManagementData(payload)
+  }, [employeeHours, currentProjectHours, plannedProjectHours, timeLogEntries])
 
   const itemOptions = [
     { value: 'manufacture', label: 'Manufacture' },
@@ -113,6 +280,230 @@ function App() {
   const removeLineItem = (id) => {
     if (lineItems.length > 1) {
       setLineItems(lineItems.filter(item => item.id !== id))
+    }
+  }
+
+  const appendTimeLogEntry = async (action, section, details) => {
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      action,
+      group: action,
+      section,
+      timestamp: new Date().toISOString(),
+      ...details
+    }
+
+    setTimeLogEntries((prev) => [entry, ...prev].slice(0, 200))
+  }
+
+  const addEmployeeHour = () => {
+    if (!employeeForm.name || !employeeForm.date || !employeeForm.timeIn || !employeeForm.timeOut) return
+    const newEntry = {
+      id: Date.now(),
+      name: employeeForm.name,
+      date: employeeForm.date,
+      timeIn: employeeForm.timeIn,
+      timeOut: employeeForm.timeOut
+    }
+    setEmployeeHours([newEntry, ...employeeHours])
+    setEmployeeForm({ name: '', date: '', timeIn: '', timeOut: '' })
+    void appendTimeLogEntry('add', 'employee-hours', { entry: newEntry })
+  }
+
+  const updateEmployeeHour = (id, field, value) => {
+    setEmployeeHours((prev) => {
+      const currentEntry = prev.find((item) => item.id === id)
+      const nextEntries = prev.map((item) => item.id === id ? { ...item, [field]: value } : item)
+      if (currentEntry && currentEntry[field] !== value) {
+        void appendTimeLogEntry('edit', 'employee-hours', {
+          itemId: id,
+          field,
+          previousValue: currentEntry[field],
+          newValue: value
+        })
+      }
+      return nextEntries
+    })
+  }
+
+  const removeEmployeeHour = (id) => {
+    const entryToRemove = employeeHours.find((item) => item.id === id)
+    setEmployeeHours(employeeHours.filter((item) => item.id !== id))
+    if (entryToRemove) {
+      void appendTimeLogEntry('remove', 'employee-hours', { itemId: id, entry: entryToRemove })
+    }
+  }
+
+  const addCurrentProjectHour = () => {
+    if (!currentProjectForm.name || !currentProjectForm.hours || !currentProjectForm.project) return
+    const newEntry = {
+      id: Date.now(),
+      name: currentProjectForm.name,
+      hours: currentProjectForm.hours,
+      project: currentProjectForm.project
+    }
+    setCurrentProjectHours([newEntry, ...currentProjectHours])
+    setCurrentProjectForm({ name: '', hours: '', project: '' })
+    void appendTimeLogEntry('add', 'current-project-hours', { entry: newEntry })
+  }
+
+  const updateCurrentProjectHour = (id, field, value) => {
+    setCurrentProjectHours((prev) => {
+      const currentEntry = prev.find((item) => item.id === id)
+      const nextEntries = prev.map((item) => item.id === id ? { ...item, [field]: value } : item)
+      if (currentEntry && currentEntry[field] !== value) {
+        void appendTimeLogEntry('edit', 'current-project-hours', {
+          itemId: id,
+          field,
+          previousValue: currentEntry[field],
+          newValue: value
+        })
+      }
+      return nextEntries
+    })
+  }
+
+  const removeCurrentProjectHour = (id) => {
+    const entryToRemove = currentProjectHours.find((item) => item.id === id)
+    setCurrentProjectHours(currentProjectHours.filter((item) => item.id !== id))
+    if (entryToRemove) {
+      void appendTimeLogEntry('remove', 'current-project-hours', { itemId: id, entry: entryToRemove })
+    }
+  }
+
+  const addPlannedProjectHour = () => {
+    if (!plannedProjectForm.name || !plannedProjectForm.hours || !plannedProjectForm.project) return
+    const newEntry = {
+      id: Date.now(),
+      name: plannedProjectForm.name,
+      hours: plannedProjectForm.hours,
+      project: plannedProjectForm.project
+    }
+    setPlannedProjectHours([newEntry, ...plannedProjectHours])
+    setPlannedProjectForm({ name: '', hours: '', project: '' })
+    void appendTimeLogEntry('add', 'planned-project-hours', { entry: newEntry })
+  }
+
+  const updatePlannedProjectHour = (id, field, value) => {
+    setPlannedProjectHours((prev) => {
+      const currentEntry = prev.find((item) => item.id === id)
+      const nextEntries = prev.map((item) => item.id === id ? { ...item, [field]: value } : item)
+      if (currentEntry && currentEntry[field] !== value) {
+        void appendTimeLogEntry('edit', 'planned-project-hours', {
+          itemId: id,
+          field,
+          previousValue: currentEntry[field],
+          newValue: value
+        })
+      }
+      return nextEntries
+    })
+  }
+
+  const removePlannedProjectHour = (id) => {
+    const entryToRemove = plannedProjectHours.find((item) => item.id === id)
+    setPlannedProjectHours(plannedProjectHours.filter((item) => item.id !== id))
+    if (entryToRemove) {
+      void appendTimeLogEntry('remove', 'planned-project-hours', { itemId: id, entry: entryToRemove })
+    }
+  }
+
+  const persistEmployeesToFile = async (employeesToSave) => {
+    const payload = JSON.stringify({ generatedAt: new Date().toISOString(), employees: employeesToSave }, null, 2)
+
+    try {
+      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: 'employee.json',
+          types: [{ description: 'JSON Files', accept: { 'application/json': ['.json'] } }]
+        })
+        const writable = await handle.createWritable()
+        await writable.write(payload)
+        await writable.close()
+        setEmployeeManagementStatus('Saved employee data to file.')
+      } else {
+        const blob = new Blob([payload], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = 'employee.json'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        setEmployeeManagementStatus('Downloaded employee.json.')
+      }
+    } catch (error) {
+      console.error('Unable to save employee JSON file', error)
+      setEmployeeManagementStatus('Saved locally only. File picker was cancelled.')
+    }
+  }
+
+  const saveEmployeesToJson = async () => {
+    localStorage.setItem('employee-management-data', JSON.stringify(employeeOptions))
+    setEmployeeManagementStatus('Employee roster saved locally.')
+    await persistEmployeesToFile(employeeOptions)
+  }
+
+  const resetEmployeeManagementForm = () => {
+    setEmployeeManagementForm({ name: '', role: '', department: '', email: '', phone: '' })
+    setEditingEmployeeManagementId(null)
+  }
+
+  const handleEmployeeManagementSubmit = (event) => {
+    event.preventDefault()
+
+    if (!employeeManagementForm.name || !employeeManagementForm.role || !employeeManagementForm.department) {
+      setEmployeeManagementStatus('Name, role, and department are required.')
+      return
+    }
+
+    if (editingEmployeeManagementId) {
+      const nextEmployees = employeeOptions.map((employee) => (
+        employee.id === editingEmployeeManagementId
+          ? { ...employee, ...employeeManagementForm }
+          : employee
+      ))
+
+      setEmployeeOptions(nextEmployees)
+      localStorage.setItem('employee-management-data', JSON.stringify(nextEmployees))
+      setEmployeeManagementStatus('Employee updated.')
+      void persistEmployeesToFile(nextEmployees)
+    } else {
+      const newEmployee = {
+        id: Date.now(),
+        ...employeeManagementForm
+      }
+      const nextEmployees = [newEmployee, ...employeeOptions]
+      setEmployeeOptions(nextEmployees)
+      localStorage.setItem('employee-management-data', JSON.stringify(nextEmployees))
+      setEmployeeManagementStatus('Employee added.')
+      void persistEmployeesToFile(nextEmployees)
+    }
+
+    resetEmployeeManagementForm()
+  }
+
+  const startEditingEmployee = (employee) => {
+    setEditingEmployeeManagementId(employee.id)
+    setEmployeeManagementForm({
+      name: employee.name || '',
+      role: employee.role || '',
+      department: employee.department || '',
+      email: employee.email || '',
+      phone: employee.phone || ''
+    })
+  }
+
+  const deleteEmployee = (id) => {
+    const nextEmployees = employeeOptions.filter((employee) => employee.id !== id)
+    setEmployeeOptions(nextEmployees)
+    localStorage.setItem('employee-management-data', JSON.stringify(nextEmployees))
+    setEmployeeManagementStatus('Employee removed.')
+    void persistEmployeesToFile(nextEmployees)
+
+    if (editingEmployeeManagementId === id) {
+      resetEmployeeManagementForm()
     }
   }
 
@@ -175,6 +566,58 @@ function App() {
 
   const closeHistoryModal = () => {
     setSelectedHistoryQuote(null)
+  }
+
+  const downloadTextReport = (fileName, content) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleHeaderExport = () => {
+    if (activePage === 'time-management') {
+      const lines = [
+        'Time Management Report',
+        `Generated: ${new Date().toLocaleString()}`,
+        '',
+        'Employee Hours:',
+        ...employeeHours.map((entry) => `- ${entry.name || 'Unknown'} | ${entry.date || '-'} | ${entry.timeIn || '-'}-${entry.timeOut || '-'}`),
+        '',
+        'Current Project Hours:',
+        ...currentProjectHours.map((entry) => `- ${entry.name || 'Unknown'} | ${entry.hours || '-'} | ${entry.project || '-'}`),
+        '',
+        'Planned Project Hours:',
+        ...plannedProjectHours.map((entry) => `- ${entry.name || 'Unknown'} | ${entry.hours || '-'} | ${entry.project || '-'}`),
+        '',
+        'Activity Log:',
+        ...timeLogEntries.map((entry) => `- [${entry.timestamp || '-'}] ${entry.action || 'action'} ${entry.section || ''}`)
+      ]
+
+      downloadTextReport('time-management-report.txt', lines.join('\n'))
+      return
+    }
+
+    if (activePage === 'employee-management') {
+      const lines = [
+        'Employee Report',
+        `Generated: ${new Date().toLocaleString()}`,
+        `Total employees: ${employeeOptions.length}`,
+        '',
+        'Employees:',
+        ...employeeOptions.map((employee) => `- ${employee.name || 'Unknown'} | ${employee.role || '-'} | ${employee.department || '-'} | ${employee.email || '-'} | ${employee.phone || '-'}`)
+      ]
+
+      downloadTextReport('employee-report.txt', lines.join('\n'))
+      return
+    }
+
+    void generatePDF()
   }
 
   const generatePDF = async () => {
@@ -280,172 +723,284 @@ function App() {
   }
 
   return (
-    <div className="app-container">
-      <div className="form-section">
-        <h1>Quotation Generator</h1>
-        
-        <div className="form-group">
-          <label>Quotation To (Customer Name/Company)</label>
-          <select
-            value={selectedQuotationVendorId}
-            onChange={(e) => handleVendorSelection(e.target.value, 'quotation')}
+    <div className="app-shell">
+      <aside className="app-sidebar">
+        <div className="sidebar-brand">
+          <p className="brand-eyebrow">MSP</p>
+          <h2>Quotation Hub</h2>
+          <p>Create, review, and export quotes from a dedicated workspace.</p>
+        </div>
+
+        <nav className="sidebar-nav" aria-label="Primary">
+          <button
+            type="button"
+            className={`nav-item ${activePage === 'builder' ? 'active' : ''}`}
+            onClick={() => setActivePage('builder')}
           >
-            {vendorOptions.map((vendor) => (
-              <option key={vendor.id} value={vendor.id}>
-                {vendor.company}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label>Shipping Address</label>
-          <select
-            value={selectedShippingVendorId}
-            onChange={(e) => handleVendorSelection(e.target.value, 'shipping')}
+            <span className="nav-icon">✎</span>
+            Create Quote
+          </button>
+          <button
+            type="button"
+            className={`nav-item ${activePage === 'history' ? 'active' : ''}`}
+            onClick={() => setActivePage('history')}
           >
-            {vendorOptions.map((vendor) => (
-              <option key={vendor.id} value={vendor.id}>
-                {vendor.company}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="accordion-card">
-          <button type="button" className="accordion-toggle" onClick={() => setAccordionOpen(!accordionOpen)}>
-            <span>Additional Panel</span>
-            <span className="accordion-icon">{accordionOpen ? '−' : '+'}</span>
+            <span className="nav-icon">🕘</span>
+            History
           </button>
-
-          {accordionOpen && (
-            <div className="accordion-content">
-              <label htmlFor="panel-description">Description</label>
-              <textarea
-                id="panel-description"
-                value={panelDescription}
-                onChange={(e) => setPanelDescription(e.target.value)}
-                rows="6"
-                placeholder="Enter description for the JSON panel"
-              />
-
-              <div className="accordion-actions">
-                <button type="button" className="btn-save-json" onClick={savePanelToJson}>
-                  Save to JSON
-                </button>
-                {panelStatus ? <span className="save-status">{panelStatus}</span> : null}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="line-items-section">
-          <h2>Line Items</h2>
-          <div className="line-items-table">
-            <div className="table-header">
-              <div className="col-qty">QTY</div>
-              <div className="col-item">ITEM</div>
-              <div className="col-description">DESCRIPTION</div>
-              <div className="col-price">UNIT PRICE</div>
-              <div className="col-total">LINE TOTAL</div>
-              <div className="col-action">ACTION</div>
-            </div>
-
-            {lineItems.map((item) => (
-              <div key={item.id} className="table-row">
-                <div className="col-qty">
-                  <input
-                    type="number"
-                    min="0"
-                    value={item.qty}
-                    onChange={(e) => handleLineItemChange(item.id, 'qty', e.target.value)}
-                    placeholder="0"
-                  />
-                </div>
-                <div className="col-item">
-                  <select
-                    value={item.item}
-                    onChange={(e) => handleLineItemChange(item.id, 'item', e.target.value)}
-                  >
-                    {itemOptions.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="col-description">
-                  <textarea
-                    value={item.description}
-                    onChange={(e) => {
-                      handleLineItemChange(item.id, 'description', e.target.value)
-                      resizeTextarea(e.target)
-                    }}
-                    onInput={(e) => resizeTextarea(e.target)}
-                    placeholder="Description"
-                    rows="2"
-                  />
-                </div>
-                <div className="col-price">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={item.unitPrice}
-                    onChange={(e) => handleLineItemChange(item.id, 'unitPrice', e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div className="col-total">
-                  {calculateLineTotal(item.qty, item.unitPrice)}
-                </div>
-                <div className="col-action">
-                  <button
-                    className="btn-delete"
-                    onClick={() => removeLineItem(item.id)}
-                    disabled={lineItems.length === 1}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <button className="btn-add" onClick={addLineItem}>
-            + Add Line Item
+          <button
+            type="button"
+            className={`nav-item ${activePage === 'preview' ? 'active' : ''}`}
+            onClick={() => setActivePage('preview')}
+          >
+            <span className="nav-icon">🖨️</span>
+            Preview
           </button>
-        </div>
+          <button
+            type="button"
+            className={`nav-item ${activePage === 'time-management' ? 'active' : ''}`}
+            onClick={() => setActivePage('time-management')}
+          >
+            <span className="nav-icon">⏱️</span>
+            Time Management
+          </button>
+          <button
+            type="button"
+            className={`nav-item ${activePage === 'employee-management' ? 'active' : ''}`}
+            onClick={() => setActivePage('employee-management')}
+          >
+            <span className="nav-icon">👥</span>
+            Employee Management
+          </button>
+        </nav>
 
-        <div className="totals-section">
-          <div className="total-price">
-            <span>TOTAL PRICE:</span>
+        <div className="sidebar-card">
+          <p className="card-label">Current quote</p>
+          <h3>{quotationNumber}</h3>
+          <p>{quotationTo || 'Pick a customer'}</p>
+          <div className="summary-metric">
+            <span>Total</span>
             <strong>R{parseFloat(calculateTotalPrice()).toFixed(2)}</strong>
           </div>
         </div>
+      </aside>
 
-        <div className="form-group">
-          <label>PDF save location</label>
-          <div className="save-location-row">
-            <span className="save-location-label">{saveLocationLabel}</span>
+      <main className="app-main">
+        <header className="app-header">
+          <div>
+            <p className="eyebrow">Multi-page workspace</p>
+            <h1>{activePage === 'builder' ? 'Quote builder' : activePage === 'history' ? 'Quotation history' : activePage === 'time-management' ? 'Time management' : 'PDF preview'}</h1>
           </div>
-        </div>
+          <div className="header-actions">
+            <button type="button" className="btn-secondary" onClick={() => setActivePage('history')}>
+              View history
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => setActivePage('preview')}>
+              Preview output
+            </button>
+            {(activePage === 'builder' || activePage === 'preview') && (
+              <button className="btn-generate" onClick={handleHeaderExport}>
+                Download PDF
+              </button>
+            )}
+            {(activePage === 'time-management' || activePage === 'employee-management') && (
+              <button className="btn-generate" onClick={handleHeaderExport}>
+                Download report
+              </button>
+            )}
+          </div>
+        </header>
 
-        <div className="button-group">
-          <button className="btn-generate" onClick={generatePDF}>
-            Download PDF
-          </button>
-        </div>
+        {activePage === 'builder' && (
+          <section className="page-card">
+            <div className="page-header">
+              <div>
+                <p className="section-kicker">Step 1</p>
+                <h2>Build your quotation</h2>
+              </div>
+              <span className="page-badge">Draft</span>
+            </div>
 
-        <div className="history-card">
-          <button type="button" className="accordion-toggle" onClick={() => setHistoryOpen(!historyOpen)}>
-            <span>Quotation History</span>
-            <span className="accordion-icon">{historyOpen ? '−' : '+'}</span>
-          </button>
-          {historyOpen && (
-            <div className="history-content">
+            <div className="builder-grid">
+              <div className="main-stack">
+                <div className="form-section">
+                  <div className="form-group">
+                    <label>Quotation To (Customer Name/Company)</label>
+                    <select
+                      value={selectedQuotationVendorId}
+                      onChange={(e) => handleVendorSelection(e.target.value, 'quotation')}
+                    >
+                      {vendorOptions.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.company}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Shipping Address</label>
+                    <select
+                      value={selectedShippingVendorId}
+                      onChange={(e) => handleVendorSelection(e.target.value, 'shipping')}
+                    >
+                      {vendorOptions.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.company}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="accordion-card">
+                    <button type="button" className="accordion-toggle" onClick={() => setAccordionOpen(!accordionOpen)}>
+                      <span>Additional Panel</span>
+                      <span className="accordion-icon">{accordionOpen ? '−' : '+'}</span>
+                    </button>
+
+                    {accordionOpen && (
+                      <div className="accordion-content">
+                        <label htmlFor="panel-description">Description</label>
+                        <textarea
+                          id="panel-description"
+                          value={panelDescription}
+                          onChange={(e) => setPanelDescription(e.target.value)}
+                          rows="6"
+                          placeholder="Enter description for the JSON panel"
+                        />
+
+                        <div className="accordion-actions">
+                          <button type="button" className="btn-save-json" onClick={savePanelToJson}>
+                            Save to JSON
+                          </button>
+                          {panelStatus ? <span className="save-status">{panelStatus}</span> : null}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="line-items-section">
+                    <h2>Line Items</h2>
+                    <div className="line-items-table">
+                      <div className="table-header">
+                        <div className="col-qty">QTY</div>
+                        <div className="col-item">ITEM</div>
+                        <div className="col-description">DESCRIPTION</div>
+                        <div className="col-price">UNIT PRICE</div>
+                        <div className="col-total">LINE TOTAL</div>
+                        <div className="col-action">ACTION</div>
+                      </div>
+
+                      {lineItems.map((item) => (
+                        <div key={item.id} className="table-row">
+                          <div className="col-qty">
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.qty}
+                              onChange={(e) => handleLineItemChange(item.id, 'qty', e.target.value)}
+                              placeholder="0"
+                            />
+                          </div>
+                          <div className="col-item">
+                            <select
+                              value={item.item}
+                              onChange={(e) => handleLineItemChange(item.id, 'item', e.target.value)}
+                            >
+                              {itemOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="col-description">
+                            <textarea
+                              value={item.description}
+                              onChange={(e) => {
+                                handleLineItemChange(item.id, 'description', e.target.value)
+                                resizeTextarea(e.target)
+                              }}
+                              onInput={(e) => resizeTextarea(e.target)}
+                              placeholder="Description"
+                              rows="2"
+                            />
+                          </div>
+                          <div className="col-price">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unitPrice}
+                              onChange={(e) => handleLineItemChange(item.id, 'unitPrice', e.target.value)}
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div className="col-total">
+                            {calculateLineTotal(item.qty, item.unitPrice)}
+                          </div>
+                          <div className="col-action">
+                            <button
+                              className="btn-delete"
+                              onClick={() => removeLineItem(item.id)}
+                              disabled={lineItems.length === 1}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button className="btn-add" onClick={addLineItem}>
+                      + Add Line Item
+                    </button>
+                  </div>
+
+                  <div className="totals-section">
+                    <div className="total-price">
+                      <span>TOTAL PRICE:</span>
+                      <strong>R{parseFloat(calculateTotalPrice()).toFixed(2)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label>PDF save location</label>
+                    <div className="save-location-row">
+                      <span className="save-location-label">{saveLocationLabel}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="side-stack">
+                <div className="info-card">
+                  <h3>Quote snapshot</h3>
+                  <ul>
+                    <li><span>Customer</span><strong>{quotationTo || 'Not selected'}</strong></li>
+                    <li><span>Delivery</span><strong>{shippingAddress || 'Not selected'}</strong></li>
+                    <li><span>Line items</span><strong>{lineItems.length}</strong></li>
+                    <li><span>Status</span><strong>Draft</strong></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {activePage === 'history' && (
+          <section className="page-card">
+            <div className="page-header">
+              <div>
+                <p className="section-kicker">Step 2</p>
+                <h2>Saved quotations</h2>
+              </div>
+              <span className="page-badge">Recent</span>
+            </div>
+
+            <div className="history-card history-card-page">
               {quotationHistory.length === 0 ? (
                 <p className="empty-history">No quotations created yet.</p>
               ) : (
-                <div className="history-list">
+                <div className="history-list history-list-page">
                   {quotationHistory.map((quote) => (
                     <button
                       key={quote.id}
@@ -463,9 +1018,447 @@ function App() {
                 </div>
               )}
             </div>
-          )}
-        </div>
-      </div>
+          </section>
+        )}
+
+        {activePage === 'preview' && (
+          <section className="page-card preview-page">
+            <div className="page-header">
+              <div>
+                <p className="section-kicker">Step 3</p>
+                <h2>Review the final document</h2>
+              </div>
+              <span className="page-badge">Ready</span>
+            </div>
+            <p className="page-copy">The output below mirrors the PDF layout so your team can review the document before export.</p>
+          </section>
+        )}
+
+        {activePage === 'employee-management' && (
+          <section className="page-card">
+            <div className="page-header">
+              <div>
+                <p className="section-kicker">Step 4</p>
+                <h2>Employee management</h2>
+              </div>
+              <span className="page-badge">Roster</span>
+            </div>
+
+            <p className="time-log-status">{employeeManagementStatus}</p>
+
+            <div className="employee-summary-grid">
+              <div className="employee-summary-card">
+                <span>Total employees</span>
+                <strong>{employeeOptions.length}</strong>
+              </div>
+              <div className="employee-summary-card">
+                <span>Departments</span>
+                <strong>{new Set(employeeOptions.map((employee) => employee.department).filter(Boolean)).size}</strong>
+              </div>
+              <div className="employee-summary-card">
+                <span>Latest update</span>
+                <strong>{employeeOptions[0]?.name || 'No roster yet'}</strong>
+              </div>
+            </div>
+
+            <div className="employee-management-grid">
+              <section className="employee-editor-card">
+                <div className="employee-card-header">
+                  <h3>{editingEmployeeManagementId ? 'Edit employee' : 'Add employee'}</h3>
+                  {editingEmployeeManagementId ? (
+                    <button type="button" className="btn-secondary" onClick={resetEmployeeManagementForm}>Cancel</button>
+                  ) : null}
+                </div>
+
+                <form className="employee-form-grid" onSubmit={handleEmployeeManagementSubmit}>
+                  <label>
+                    <span>Name</span>
+                    <input
+                      value={employeeManagementForm.name}
+                      onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, name: e.target.value })}
+                      placeholder="Employee name"
+                    />
+                  </label>
+                  <label>
+                    <span>Role</span>
+                    <input
+                      value={employeeManagementForm.role}
+                      onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, role: e.target.value })}
+                      placeholder="Role"
+                    />
+                  </label>
+                  <label>
+                    <span>Department</span>
+                    <input
+                      value={employeeManagementForm.department}
+                      onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, department: e.target.value })}
+                      placeholder="Department"
+                    />
+                  </label>
+                  <label>
+                    <span>Email</span>
+                    <input
+                      type="email"
+                      value={employeeManagementForm.email}
+                      onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, email: e.target.value })}
+                      placeholder="email@example.com"
+                    />
+                  </label>
+                  <label>
+                    <span>Phone</span>
+                    <input
+                      value={employeeManagementForm.phone}
+                      onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, phone: e.target.value })}
+                      placeholder="Phone"
+                    />
+                  </label>
+                  <div className="employee-form-actions">
+                    <button type="submit" className="btn-add">{editingEmployeeManagementId ? 'Save changes' : 'Add employee'}</button>
+                    <button type="button" className="btn-secondary" onClick={saveEmployeesToJson}>Save JSON</button>
+                  </div>
+                </form>
+              </section>
+
+              <section className="employee-list-card">
+                <div className="employee-card-header">
+                  <h3>Employee roster</h3>
+                  <span>{employeeOptions.length} people</span>
+                </div>
+
+                {employeeOptions.length === 0 ? (
+                  <p className="employee-empty-state">No employees added yet.</p>
+                ) : (
+                  <div className="employee-list">
+                    {employeeOptions.map((employee) => (
+                      <div key={employee.id} className="employee-list-item">
+                        <div>
+                          <strong>{employee.name}</strong>
+                          <p>{employee.role || 'Role not set'}</p>
+                          <small>{employee.department || 'Department pending'} • {employee.email || 'No email'}</small>
+                        </div>
+                        <div className="employee-list-actions">
+                          <button type="button" className="btn-secondary" onClick={() => startEditingEmployee(employee)}>Edit</button>
+                          <button type="button" className="btn-delete" onClick={() => deleteEmployee(employee.id)}>Delete</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          </section>
+        )}
+
+        {activePage === 'time-management' && (
+          <section className="page-card">
+            <div className="page-header">
+              <div>
+                <p className="section-kicker">Step 4</p>
+                <h2>Time management</h2>
+              </div>
+              <span className="page-badge">Planning</span>
+            </div>
+
+            <p className="time-log-status">{timeLogStatus}</p>
+
+            <div className="time-management-grid">
+              <div className="time-summary-card">
+                <h3>Weekly effort</h3>
+                <div className="time-metric">
+                  <strong>12.5 hrs</strong>
+                  <span>Estimated this week</span>
+                </div>
+                <div className="time-metric">
+                  <strong>4 tasks</strong>
+                  <span>Scheduled activities</span>
+                </div>
+              </div>
+
+              <div className="time-list-card">
+                <h3>Upcoming activities</h3>
+                <ul className="time-list">
+                  {timeEntries.map((entry) => (
+                    <li key={entry.id} className="time-list-item">
+                      <div>
+                        <strong>{entry.title}</strong>
+                        <p>{entry.date}</p>
+                      </div>
+                      <div className="time-list-meta">
+                        <span>{entry.hours} hrs</span>
+                        <small>{entry.status}</small>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="time-section-grid">
+              <section className="time-table-card">
+                <div className="time-table-header">
+                  <h3>Employee hours</h3>
+                  <span>Attendance</span>
+                </div>
+                <div className="time-table">
+                  <div className="time-row time-row-head">
+                    <span>Name</span>
+                    <span>Date</span>
+                    <span>Time in</span>
+                    <span>Time out</span>
+                  </div>
+                  {employeeHours.map((entry) => (
+                    <div key={entry.id} className="time-row-wrapper">
+                      <div className="time-row">
+                        <span>{entry.name}</span>
+                        <span>{entry.date}</span>
+                        <span>{entry.timeIn}</span>
+                        <div className="time-row-actions">
+                          <span>{entry.timeOut}</span>
+                          <button type="button" className="btn-secondary" onClick={() => setEditingEmployeeId(entry.id)}>Edit</button>
+                        </div>
+                      </div>
+                      {editingEmployeeId === entry.id && (
+                        <div className="time-editor-panel">
+                          <div className="time-editor-grid">
+                            <select
+                              value={entry.name}
+                              onChange={(e) => updateEmployeeHour(entry.id, 'name', e.target.value)}
+                            >
+                              {employeeOptions.map((employee) => (
+                                <option key={employee.id} value={employee.name}>
+                                  {employee.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="date"
+                              value={entry.date}
+                              onChange={(e) => updateEmployeeHour(entry.id, 'date', e.target.value)}
+                            />
+                            <input
+                              type="time"
+                              value={entry.timeIn}
+                              onChange={(e) => updateEmployeeHour(entry.id, 'timeIn', e.target.value)}
+                            />
+                            <input
+                              type="time"
+                              value={entry.timeOut}
+                              onChange={(e) => updateEmployeeHour(entry.id, 'timeOut', e.target.value)}
+                            />
+                          </div>
+                          <div className="time-editor-actions">
+                            <button type="button" className="btn-delete" onClick={() => removeEmployeeHour(entry.id)}>Remove</button>
+                            <button type="button" className="btn-secondary" onClick={() => setEditingEmployeeId(null)}>Done</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="time-form">
+                  <select
+                    value={employeeForm.name}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, name: e.target.value })}
+                  >
+                    <option value="">Select employee</option>
+                    {employeeOptions.map((employee) => (
+                      <option key={employee.id} value={employee.name}>
+                        {employee.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="date"
+                    value={employeeForm.date}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, date: e.target.value })}
+                  />
+                  <input
+                    type="time"
+                    value={employeeForm.timeIn}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, timeIn: e.target.value })}
+                  />
+                  <input
+                    type="time"
+                    value={employeeForm.timeOut}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, timeOut: e.target.value })}
+                  />
+                  <button type="button" className="btn-add" onClick={addEmployeeHour}>Add</button>
+                </div>
+              </section>
+
+              <section className="time-table-card">
+                <div className="time-table-header">
+                  <h3>Current project hours</h3>
+                  <span>Live allocation</span>
+                </div>
+                <div className="time-table">
+                  <div className="time-row time-row-head">
+                    <span>Employee</span>
+                    <span>Hours</span>
+                    <span>Project</span>
+                  </div>
+                  {currentProjectHours.map((entry) => (
+                    <div key={entry.id} className="time-row-wrapper">
+                      <div className="time-row">
+                        <span>{entry.name}</span>
+                        <span>{entry.hours}</span>
+                        <div className="time-row-actions">
+                          <span>{entry.project}</span>
+                          <button type="button" className="btn-secondary" onClick={() => setEditingCurrentProjectId(entry.id)}>Edit</button>
+                        </div>
+                      </div>
+                      {editingCurrentProjectId === entry.id && (
+                        <div className="time-editor-panel">
+                          <div className="time-editor-grid">
+                            <select
+                              value={entry.name}
+                              onChange={(e) => updateCurrentProjectHour(entry.id, 'name', e.target.value)}
+                            >
+                              {employeeOptions.map((employee) => (
+                                <option key={employee.id} value={employee.name}>
+                                  {employee.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={entry.hours}
+                              onChange={(e) => updateCurrentProjectHour(entry.id, 'hours', e.target.value)}
+                              placeholder="Hours"
+                            />
+                            <input
+                              value={entry.project}
+                              onChange={(e) => updateCurrentProjectHour(entry.id, 'project', e.target.value)}
+                              placeholder="Project"
+                            />
+                          </div>
+                          <div className="time-editor-actions">
+                            <button type="button" className="btn-delete" onClick={() => removeCurrentProjectHour(entry.id)}>Remove</button>
+                            <button type="button" className="btn-secondary" onClick={() => setEditingCurrentProjectId(null)}>Done</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="time-form">
+                  <select
+                    value={currentProjectForm.name}
+                    onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, name: e.target.value })}
+                  >
+                    <option value="">Select employee</option>
+                    {employeeOptions.map((employee) => (
+                      <option key={employee.id} value={employee.name}>
+                        {employee.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    step="0.5"
+                    placeholder="Hours"
+                    value={currentProjectForm.hours}
+                    onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, hours: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Project"
+                    value={currentProjectForm.project}
+                    onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, project: e.target.value })}
+                  />
+                  <button type="button" className="btn-add" onClick={addCurrentProjectHour}>Add</button>
+                </div>
+              </section>
+
+              <section className="time-table-card">
+                <div className="time-table-header">
+                  <h3>Planned project hours</h3>
+                  <span>Upcoming</span>
+                </div>
+                <div className="time-table">
+                  <div className="time-row time-row-head">
+                    <span>Employee</span>
+                    <span>Hours</span>
+                    <span>Project</span>
+                  </div>
+                  {plannedProjectHours.map((entry) => (
+                    <div key={entry.id} className="time-row-wrapper">
+                      <div className="time-row">
+                        <span>{entry.name}</span>
+                        <span>{entry.hours}</span>
+                        <div className="time-row-actions">
+                          <span>{entry.project}</span>
+                          <button type="button" className="btn-secondary" onClick={() => setEditingPlannedProjectId(entry.id)}>Edit</button>
+                        </div>
+                      </div>
+                      {editingPlannedProjectId === entry.id && (
+                        <div className="time-editor-panel">
+                          <div className="time-editor-grid">
+                            <select
+                              value={entry.name}
+                              onChange={(e) => updatePlannedProjectHour(entry.id, 'name', e.target.value)}
+                            >
+                              {employeeOptions.map((employee) => (
+                                <option key={employee.id} value={employee.name}>
+                                  {employee.name}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              step="0.5"
+                              value={entry.hours}
+                              onChange={(e) => updatePlannedProjectHour(entry.id, 'hours', e.target.value)}
+                              placeholder="Hours"
+                            />
+                            <input
+                              value={entry.project}
+                              onChange={(e) => updatePlannedProjectHour(entry.id, 'project', e.target.value)}
+                              placeholder="Project"
+                            />
+                          </div>
+                          <div className="time-editor-actions">
+                            <button type="button" className="btn-delete" onClick={() => removePlannedProjectHour(entry.id)}>Remove</button>
+                            <button type="button" className="btn-secondary" onClick={() => setEditingPlannedProjectId(null)}>Done</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="time-form">
+                  <select
+                    value={plannedProjectForm.name}
+                    onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, name: e.target.value })}
+                  >
+                    <option value="">Select employee</option>
+                    {employeeOptions.map((employee) => (
+                      <option key={employee.id} value={employee.name}>
+                        {employee.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    step="0.5"
+                    placeholder="Hours"
+                    value={plannedProjectForm.hours}
+                    onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, hours: e.target.value })}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Project"
+                    value={plannedProjectForm.project}
+                    onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, project: e.target.value })}
+                  />
+                  <button type="button" className="btn-add" onClick={addPlannedProjectHour}>Add</button>
+                </div>
+              </section>
+            </div>
+          </section>
+        )}
+      </main>
 
       {/* PDF Template */}
       {selectedHistoryQuote && (
@@ -484,7 +1477,7 @@ function App() {
           </div>
         </div>
       )}
-      <div ref={quotationRef} className="pdf-template">
+      <div ref={quotationRef} className={`pdf-template ${activePage === 'preview' ? 'preview-visible' : ''}`}>
         <div className="invoice-container">
           
           <header className="header">

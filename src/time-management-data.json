@@ -1,0 +1,14 @@
+{
+  "employeeHours": [
+    { "id": 1, "name": "A. Mokoena", "date": "2026-07-29", "timeIn": "07:30", "timeOut": "16:00" },
+    { "id": 2, "name": "L. Kgosi", "date": "2026-07-29", "timeIn": "08:00", "timeOut": "15:30" }
+  ],
+  "currentProjectHours": [
+    { "id": 1, "name": "A. Mokoena", "hours": "6.5", "project": "Mine Shaft Upgrade" },
+    { "id": 2, "name": "L. Kgosi", "hours": "4.0", "project": "Mine Shaft Upgrade" }
+  ],
+  "plannedProjectHours": [
+    { "id": 1, "name": "A. Mokoena", "hours": "8.0", "project": "Pump Station Build" },
+    { "id": 2, "name": "L. Kgosi", "hours": "5.5", "project": "Pump Station Build" }
+  ]
+}
