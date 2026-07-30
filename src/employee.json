@@ -1,8 +1,8 @@
 {
   "employees": [
-    { "id": 1, "name": "A. Mokoena" },
-    { "id": 2, "name": "L. Kgosi" },
-    { "id": 3, "name": "K. Ndlovu" },
-    { "id": 4, "name": "T. Maseko" }
+    { "id": 1, "name": "A. Mokoena", "title": "Supervisor", "coyNumber": "10000001" },
+    { "id": 2, "name": "L. Kgosi", "title": "Boilermaker", "coyNumber": "10000002" },
+    { "id": 3, "name": "K. Ndlovu", "title": "Welder", "coyNumber": "10000003" },
+    { "id": 4, "name": "T. Maseko", "title": "Fitter", "coyNumber": "10000004" }
   ]
 }

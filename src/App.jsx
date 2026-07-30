@@ -10,6 +10,27 @@ import materialPricesData from '../material-prices.json'
 
 const vendorOptions = vendorData?.vendors || []
 const validPages = ['builder', 'history', 'preview', 'time-management', 'employee-management', 'price-calculator']
+const initialLabourTitleOptions = (labourPricesData?.labourPrices || [])
+  .map((entry) => entry.title)
+  .filter(Boolean)
+const coyNumberPattern = /^\d{8}$/
+
+const sanitizeEmployeeRoster = (employees, validTitles) => {
+  const allowedTitles = new Set(validTitles)
+
+  return (Array.isArray(employees) ? employees : []).map((employee) => {
+    const rawRole = (employee?.role || employee?.title || '').trim()
+    const role = allowedTitles.has(rawRole) ? rawRole : ''
+    const rawCoyNumber = String(employee?.coyNumber || '').replace(/\D/g, '')
+    const coyNumber = coyNumberPattern.test(rawCoyNumber) ? rawCoyNumber : ''
+    return {
+      ...employee,
+      role,
+      title: role,
+      coyNumber
+    }
+  })
+}
 
 const normalizePageKey = (page) => {
   if (page === 'time') {
@@ -137,19 +158,20 @@ function App() {
       try {
         const savedEmployees = localStorage.getItem('employee-management-data')
         if (savedEmployees) {
-          return JSON.parse(savedEmployees)
+          return sanitizeEmployeeRoster(JSON.parse(savedEmployees), initialLabourTitleOptions)
         }
       } catch (error) {
         console.error('Failed to load saved employees', error)
       }
     }
 
-    return employeeData?.employees || []
+    return sanitizeEmployeeRoster(employeeData?.employees || [], initialLabourTitleOptions)
   })
   const [employeeForm, setEmployeeForm] = useState({ name: '', date: '', timeIn: '', timeOut: '' })
   const [currentProjectForm, setCurrentProjectForm] = useState({ name: '', hours: '', project: '' })
   const [plannedProjectForm, setPlannedProjectForm] = useState({ name: '', hours: '', project: '' })
-  const [employeeManagementForm, setEmployeeManagementForm] = useState({ name: '', role: '', department: '', email: '', phone: '' })
+  const [employeeManagementForm, setEmployeeManagementForm] = useState({ name: '', role: '', coyNumber: '', department: '', email: '', phone: '' })
+  const [employeeFileHandle, setEmployeeFileHandle] = useState(null)
   const [editingEmployeeId, setEditingEmployeeId] = useState(null)
   const [editingEmployeeManagementId, setEditingEmployeeManagementId] = useState(null)
   const [employeeManagementStatus, setEmployeeManagementStatus] = useState('Manage employees and keep the roster current.')
@@ -173,6 +195,9 @@ function App() {
   })
   const [editingLabourId, setEditingLabourId] = useState(null)
   const [labourFormData, setLabourFormData] = useState({ title: '', normalHourlyRate: '', onsiteHourlyRate: '', breakdownHourlyRate: '' })
+  const labourTitleOptions = labourPrices
+    .map((labour) => labour.title)
+    .filter(Boolean)
   const [priceCalculatorStatus, setPriceCalculatorStatus] = useState('Manage labour pricing rates.')
   const [priceCalculatorOpen, setPriceCalculatorOpen] = useState(false)
   const [materialManagementStatus, setMaterialManagementStatus] = useState('Manage material pricing.')
@@ -219,6 +244,45 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const jsonLabourPrices = labourPricesData?.labourPrices || []
+    const jsonLabourTitles = jsonLabourPrices.map((entry) => entry.title).filter(Boolean)
+    const jsonEmployees = sanitizeEmployeeRoster(employeeData?.employees || [], jsonLabourTitles)
+    const jsonTimeData = {
+      employeeHours: initialTimeManagementState.employeeHours,
+      currentProjectHours: initialTimeManagementState.currentProjectHours,
+      plannedProjectHours: initialTimeManagementState.plannedProjectHours,
+      activityLog: initialTimeManagementState.activityLog,
+      updatedAt: new Date().toISOString()
+    }
+
+    setLabourPrices(jsonLabourPrices)
+    setEmployeeOptions(jsonEmployees)
+    setEmployeeHours(jsonTimeData.employeeHours)
+    setCurrentProjectHours(jsonTimeData.currentProjectHours)
+    setPlannedProjectHours(jsonTimeData.plannedProjectHours)
+    setTimeLogEntries(jsonTimeData.activityLog)
+
+    const jsonPlates = materialPricesData?.materials?.plates || []
+    const jsonAngleIron = materialPricesData?.materials?.angleIron || []
+    const jsonLinerPlates = materialPricesData?.materials?.linerPlates || []
+    setPlates(jsonPlates)
+    setSelectedPlate(jsonPlates[0]?.id || null)
+    setAngleIron(jsonAngleIron)
+    setSelectedAngleIron(jsonAngleIron[0]?.id || null)
+    setLinerPlates(jsonLinerPlates)
+    setSelectedLinerPlate(jsonLinerPlates[0]?.id || null)
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('employee-management-data', JSON.stringify(jsonEmployees))
+      localStorage.setItem('labour-prices-data', JSON.stringify({
+        generatedAt: new Date().toISOString(),
+        labourPrices: jsonLabourPrices
+      }))
+      localStorage.setItem('time-management-data', JSON.stringify(jsonTimeData))
+    }
+  }, [])
+
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('active-page', normalizePageKey(activePage))
     }
@@ -254,6 +318,21 @@ function App() {
 
     persistTimeManagementData(payload)
   }, [employeeHours, currentProjectHours, plannedProjectHours, timeLogEntries])
+
+  useEffect(() => {
+    setEmployeeOptions((prev) => {
+      const sanitized = sanitizeEmployeeRoster(prev, labourTitleOptions)
+      if (JSON.stringify(prev) === JSON.stringify(sanitized)) {
+        return prev
+      }
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('employee-management-data', JSON.stringify(sanitized))
+      }
+
+      return sanitized
+    })
+  }, [labourTitleOptions])
 
   const itemOptions = [
     { value: 'manufacture', label: 'Manufacture' },
@@ -443,15 +522,39 @@ function App() {
     const payload = JSON.stringify({ generatedAt: new Date().toISOString(), employees: employeesToSave }, null, 2)
 
     try {
-      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: 'employee.json',
-          types: [{ description: 'JSON Files', accept: { 'application/json': ['.json'] } }]
-        })
+      if (typeof window !== 'undefined' && ('showOpenFilePicker' in window || 'showSaveFilePicker' in window)) {
+        let handle = employeeFileHandle
+
+        if (!handle) {
+          if ('showOpenFilePicker' in window) {
+            const [pickedHandle] = await window.showOpenFilePicker({
+              multiple: false,
+              excludeAcceptAllOption: true,
+              types: [{ description: 'JSON Files', accept: { 'application/json': ['.json'] } }]
+            })
+            handle = pickedHandle
+          } else {
+            handle = await window.showSaveFilePicker({
+              suggestedName: 'employee.json',
+              types: [{ description: 'JSON Files', accept: { 'application/json': ['.json'] } }]
+            })
+          }
+
+          if (handle?.requestPermission) {
+            const permission = await handle.requestPermission({ mode: 'readwrite' })
+            if (permission !== 'granted') {
+              throw new Error('Read/write permission denied for selected file.')
+            }
+          }
+
+          setEmployeeFileHandle(handle)
+        }
+
         const writable = await handle.createWritable()
         await writable.write(payload)
         await writable.close()
-        setEmployeeManagementStatus('Saved employee data to file.')
+        setEmployeeManagementStatus('Employee file overwritten successfully.')
+        return true
       } else {
         const blob = new Blob([payload], { type: 'application/json' })
         const url = URL.createObjectURL(blob)
@@ -462,54 +565,72 @@ function App() {
         link.click()
         document.body.removeChild(link)
         URL.revokeObjectURL(url)
-        setEmployeeManagementStatus('Downloaded employee.json.')
+        setEmployeeManagementStatus('Downloaded employee.json (browser fallback).')
+        return false
       }
     } catch (error) {
       console.error('Unable to save employee JSON file', error)
-      setEmployeeManagementStatus('Saved locally only. File picker was cancelled.')
+      setEmployeeManagementStatus('File save cancelled or blocked.')
+      return false
     }
   }
 
   const saveEmployeesToJson = async () => {
-    localStorage.setItem('employee-management-data', JSON.stringify(employeeOptions))
-    setEmployeeManagementStatus('Employee roster saved locally.')
-    await persistEmployeesToFile(employeeOptions)
+    const sanitized = sanitizeEmployeeRoster(employeeOptions, labourTitleOptions)
+    setEmployeeOptions(sanitized)
+    const savedToFile = await persistEmployeesToFile(sanitized)
+
+    if (savedToFile) {
+      localStorage.setItem('employee-management-data', JSON.stringify(sanitized))
+      return
+    }
+
+    localStorage.setItem('employee-management-data', JSON.stringify(sanitized))
+    setEmployeeManagementStatus('Saved locally only. Link employee.json and press Save JSON again.')
   }
 
   const resetEmployeeManagementForm = () => {
-    setEmployeeManagementForm({ name: '', role: '', department: '', email: '', phone: '' })
+    setEmployeeManagementForm({ name: '', role: '', coyNumber: '', department: '', email: '', phone: '' })
     setEditingEmployeeManagementId(null)
   }
 
   const handleEmployeeManagementSubmit = (event) => {
     event.preventDefault()
 
-    if (!employeeManagementForm.name || !employeeManagementForm.role || !employeeManagementForm.department) {
-      setEmployeeManagementStatus('Name, role, and department are required.')
+    if (!labourTitleOptions.includes(employeeManagementForm.role)) {
+      setEmployeeManagementStatus('Please select a valid role from labour titles.')
+      return
+    }
+
+    if (!coyNumberPattern.test(employeeManagementForm.coyNumber)) {
+      setEmployeeManagementStatus('Coy number must be exactly 8 digits.')
+      return
+    }
+
+    if (!employeeManagementForm.name || !employeeManagementForm.role || !employeeManagementForm.department || !employeeManagementForm.coyNumber) {
+      setEmployeeManagementStatus('Name, role, coy number, and department are required.')
       return
     }
 
     if (editingEmployeeManagementId) {
-      const nextEmployees = employeeOptions.map((employee) => (
+      const nextEmployees = sanitizeEmployeeRoster(employeeOptions.map((employee) => (
         employee.id === editingEmployeeManagementId
           ? { ...employee, ...employeeManagementForm }
           : employee
-      ))
+      )), labourTitleOptions)
 
       setEmployeeOptions(nextEmployees)
       localStorage.setItem('employee-management-data', JSON.stringify(nextEmployees))
-      setEmployeeManagementStatus('Employee updated.')
-      void persistEmployeesToFile(nextEmployees)
+      setEmployeeManagementStatus('Employee updated. Click Save JSON to write file.')
     } else {
       const newEmployee = {
         id: Date.now(),
         ...employeeManagementForm
       }
-      const nextEmployees = [newEmployee, ...employeeOptions]
+      const nextEmployees = sanitizeEmployeeRoster([newEmployee, ...employeeOptions], labourTitleOptions)
       setEmployeeOptions(nextEmployees)
       localStorage.setItem('employee-management-data', JSON.stringify(nextEmployees))
-      setEmployeeManagementStatus('Employee added.')
-      void persistEmployeesToFile(nextEmployees)
+      setEmployeeManagementStatus('Employee added. Click Save JSON to write file.')
     }
 
     resetEmployeeManagementForm()
@@ -519,7 +640,8 @@ function App() {
     setEditingEmployeeManagementId(employee.id)
     setEmployeeManagementForm({
       name: employee.name || '',
-      role: employee.role || '',
+      role: employee.role || employee.title || '',
+      coyNumber: employee.coyNumber || '',
       department: employee.department || '',
       email: employee.email || '',
       phone: employee.phone || ''
@@ -530,8 +652,7 @@ function App() {
     const nextEmployees = employeeOptions.filter((employee) => employee.id !== id)
     setEmployeeOptions(nextEmployees)
     localStorage.setItem('employee-management-data', JSON.stringify(nextEmployees))
-    setEmployeeManagementStatus('Employee removed.')
-    void persistEmployeesToFile(nextEmployees)
+    setEmployeeManagementStatus('Employee removed. Click Save JSON to write file.')
 
     if (editingEmployeeManagementId === id) {
       resetEmployeeManagementForm()
@@ -1233,11 +1354,17 @@ function App() {
                   </label>
                   <label>
                     <span>Role</span>
-                    <input
+                    <select
                       value={employeeManagementForm.role}
                       onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, role: e.target.value })}
-                      placeholder="Role"
-                    />
+                    >
+                      <option value="">Select labour role</option>
+                      {labourTitleOptions.map((title) => (
+                        <option key={title} value={title}>
+                          {title}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label>
                     <span>Department</span>
@@ -1245,6 +1372,20 @@ function App() {
                       value={employeeManagementForm.department}
                       onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, department: e.target.value })}
                       placeholder="Department"
+                    />
+                  </label>
+                  <label>
+                    <span>Coy number</span>
+                    <input
+                      value={employeeManagementForm.coyNumber}
+                      onChange={(e) => {
+                        const sanitizedCoyNumber = e.target.value.replace(/\D/g, '').slice(0, 8)
+                        setEmployeeManagementForm({ ...employeeManagementForm, coyNumber: sanitizedCoyNumber })
+                      }}
+                      placeholder="8-digit coy number"
+                      inputMode="numeric"
+                      pattern="[0-9]{8}"
+                      maxLength={8}
                     />
                   </label>
                   <label>
@@ -1286,7 +1427,7 @@ function App() {
                         <div>
                           <strong>{employee.name}</strong>
                           <p>{employee.role || 'Role not set'}</p>
-                          <small>{employee.department || 'Department pending'} • {employee.email || 'No email'}</small>
+                          <small>{employee.department || 'Department pending'} • Coy: {employee.coyNumber || 'Not set'} • {employee.email || 'No email'}</small>
                         </div>
                         <div className="employee-list-actions">
                           <button type="button" className="btn-secondary" onClick={() => startEditingEmployee(employee)}>Edit</button>
