@@ -174,6 +174,7 @@ function App() {
   const [employeeFileHandle, setEmployeeFileHandle] = useState(null)
   const [editingEmployeeId, setEditingEmployeeId] = useState(null)
   const [editingEmployeeManagementId, setEditingEmployeeManagementId] = useState(null)
+  const [employeeFormOpen, setEmployeeFormOpen] = useState(false)
   const [employeeManagementStatus, setEmployeeManagementStatus] = useState('Manage employees and keep the roster current.')
   const [editingCurrentProjectId, setEditingCurrentProjectId] = useState(null)
   const [editingPlannedProjectId, setEditingPlannedProjectId] = useState(null)
@@ -592,6 +593,7 @@ function App() {
   const resetEmployeeManagementForm = () => {
     setEmployeeManagementForm({ name: '', role: '', coyNumber: '', department: '', email: '', phone: '' })
     setEditingEmployeeManagementId(null)
+    setEmployeeFormOpen(false)
   }
 
   const handleEmployeeManagementSubmit = (event) => {
@@ -638,6 +640,7 @@ function App() {
 
   const startEditingEmployee = (employee) => {
     setEditingEmployeeManagementId(employee.id)
+    setEmployeeFormOpen(true)
     setEmployeeManagementForm({
       name: employee.name || '',
       role: employee.role || employee.title || '',
@@ -1314,7 +1317,23 @@ function App() {
                 <p className="section-kicker">Step 4</p>
                 <h2>Employee management</h2>
               </div>
-              <span className="page-badge">Roster</span>
+              <div className="employee-page-actions">
+                <span className="page-badge">Roster</span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    if (employeeFormOpen || editingEmployeeManagementId) {
+                      resetEmployeeManagementForm()
+                      return
+                    }
+
+                    setEmployeeFormOpen(true)
+                  }}
+                >
+                  {employeeFormOpen || editingEmployeeManagementId ? 'Hide add employee' : 'Add employee'}
+                </button>
+              </div>
             </div>
 
             <p className="time-log-status">{employeeManagementStatus}</p>
@@ -1334,110 +1353,130 @@ function App() {
               </div>
             </div>
 
-            <div className="employee-management-grid">
-              <section className="employee-editor-card">
-                <div className="employee-card-header">
-                  <h3>{editingEmployeeManagementId ? 'Edit employee' : 'Add employee'}</h3>
-                  {editingEmployeeManagementId ? (
+            <div className="employee-roster-shell">
+              {(employeeFormOpen || editingEmployeeManagementId) && (
+                <section className="employee-form-panel">
+                  <div className="employee-card-header">
+                    <h3>{editingEmployeeManagementId ? 'Edit employee' : 'Add employee'}</h3>
                     <button type="button" className="btn-secondary" onClick={resetEmployeeManagementForm}>Cancel</button>
-                  ) : null}
-                </div>
-
-                <form className="employee-form-grid" onSubmit={handleEmployeeManagementSubmit}>
-                  <label>
-                    <span>Name</span>
-                    <input
-                      value={employeeManagementForm.name}
-                      onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, name: e.target.value })}
-                      placeholder="Employee name"
-                    />
-                  </label>
-                  <label>
-                    <span>Role</span>
-                    <select
-                      value={employeeManagementForm.role}
-                      onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, role: e.target.value })}
-                    >
-                      <option value="">Select labour role</option>
-                      {labourTitleOptions.map((title) => (
-                        <option key={title} value={title}>
-                          {title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Department</span>
-                    <input
-                      value={employeeManagementForm.department}
-                      onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, department: e.target.value })}
-                      placeholder="Department"
-                    />
-                  </label>
-                  <label>
-                    <span>Coy number</span>
-                    <input
-                      value={employeeManagementForm.coyNumber}
-                      onChange={(e) => {
-                        const sanitizedCoyNumber = e.target.value.replace(/\D/g, '').slice(0, 8)
-                        setEmployeeManagementForm({ ...employeeManagementForm, coyNumber: sanitizedCoyNumber })
-                      }}
-                      placeholder="8-digit coy number"
-                      inputMode="numeric"
-                      pattern="[0-9]{8}"
-                      maxLength={8}
-                    />
-                  </label>
-                  <label>
-                    <span>Email</span>
-                    <input
-                      type="email"
-                      value={employeeManagementForm.email}
-                      onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, email: e.target.value })}
-                      placeholder="email@example.com"
-                    />
-                  </label>
-                  <label>
-                    <span>Phone</span>
-                    <input
-                      value={employeeManagementForm.phone}
-                      onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, phone: e.target.value })}
-                      placeholder="Phone"
-                    />
-                  </label>
-                  <div className="employee-form-actions">
-                    <button type="submit" className="btn-add">{editingEmployeeManagementId ? 'Save changes' : 'Add employee'}</button>
-                    <button type="button" className="btn-secondary" onClick={saveEmployeesToJson}>Save JSON</button>
                   </div>
-                </form>
-              </section>
 
-              <section className="employee-list-card">
-                <div className="employee-card-header">
-                  <h3>Employee roster</h3>
-                  <span>{employeeOptions.length} people</span>
-                </div>
+                  <form className="employee-form-grid" onSubmit={handleEmployeeManagementSubmit}>
+                    <label>
+                      <span>Name</span>
+                      <input
+                        value={employeeManagementForm.name}
+                        onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, name: e.target.value })}
+                        placeholder="Employee name"
+                      />
+                    </label>
+                    <label>
+                      <span>Role</span>
+                      <select
+                        value={employeeManagementForm.role}
+                        onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, role: e.target.value })}
+                      >
+                        <option value="">Select labour role</option>
+                        {labourTitleOptions.map((title) => (
+                          <option key={title} value={title}>
+                            {title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Department</span>
+                      <input
+                        value={employeeManagementForm.department}
+                        onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, department: e.target.value })}
+                        placeholder="Department"
+                      />
+                    </label>
+                    <label>
+                      <span>Coy number</span>
+                      <input
+                        value={employeeManagementForm.coyNumber}
+                        onChange={(e) => {
+                          const sanitizedCoyNumber = e.target.value.replace(/\D/g, '').slice(0, 8)
+                          setEmployeeManagementForm({ ...employeeManagementForm, coyNumber: sanitizedCoyNumber })
+                        }}
+                        placeholder="8-digit coy number"
+                        inputMode="numeric"
+                        pattern="[0-9]{8}"
+                        maxLength={8}
+                      />
+                    </label>
+                    <label>
+                      <span>Email</span>
+                      <input
+                        type="email"
+                        value={employeeManagementForm.email}
+                        onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, email: e.target.value })}
+                        placeholder="email@example.com"
+                      />
+                    </label>
+                    <label>
+                      <span>Phone</span>
+                      <input
+                        value={employeeManagementForm.phone}
+                        onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, phone: e.target.value })}
+                        placeholder="Phone"
+                      />
+                    </label>
+                    <div className="employee-form-actions">
+                      <button type="submit" className="btn-add">{editingEmployeeManagementId ? 'Save changes' : 'Add employee'}</button>
+                      <button type="button" className="btn-secondary" onClick={saveEmployeesToJson}>Save JSON</button>
+                    </div>
+                  </form>
+                </section>
+              )}
 
-                {employeeOptions.length === 0 ? (
-                  <p className="employee-empty-state">No employees added yet.</p>
-                ) : (
-                  <div className="employee-list">
-                    {employeeOptions.map((employee) => (
-                      <div key={employee.id} className="employee-list-item">
-                        <div>
-                          <strong>{employee.name}</strong>
-                          <p>{employee.role || 'Role not set'}</p>
-                          <small>{employee.department || 'Department pending'} • Coy: {employee.coyNumber || 'Not set'} • {employee.email || 'No email'}</small>
-                        </div>
-                        <div className="employee-list-actions">
-                          <button type="button" className="btn-secondary" onClick={() => startEditingEmployee(employee)}>Edit</button>
-                          <button type="button" className="btn-delete" onClick={() => deleteEmployee(employee.id)}>Delete</button>
-                        </div>
-                      </div>
-                    ))}
+              {!(employeeFormOpen || editingEmployeeManagementId) && (
+                <section className="employee-roster-panel">
+                  <div className="employee-card-header">
+                    <h3>Employee roster</h3>
+                    <span>{employeeOptions.length} people</span>
                   </div>
-                )}
-              </section>
+
+                  {employeeOptions.length === 0 ? (
+                    <p className="employee-empty-state">No employees added yet.</p>
+                  ) : (
+                    <div className="employee-roster-table-wrap">
+                      <table className="employee-roster-table">
+                        <thead>
+                          <tr>
+                            <th>Name</th>
+                            <th>Role</th>
+                            <th>Department</th>
+                            <th>Coy Number</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {employeeOptions.map((employee) => (
+                            <tr key={employee.id}>
+                              <td>{employee.name || 'Not set'}</td>
+                              <td>{employee.role || 'Role not set'}</td>
+                              <td>{employee.department || 'Department pending'}</td>
+                              <td>{employee.coyNumber || 'Not set'}</td>
+                              <td>{employee.email || 'No email'}</td>
+                              <td>{employee.phone || 'No phone'}</td>
+                              <td>
+                                <div className="employee-list-actions">
+                                  <button type="button" className="btn-secondary" onClick={() => startEditingEmployee(employee)}>Edit</button>
+                                  <button type="button" className="btn-delete" onClick={() => deleteEmployee(employee.id)}>Delete</button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              )}
             </div>
           </section>
         )}
