@@ -933,6 +933,43 @@
   flex-wrap: wrap;
 }
 
+.employee-action-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: var(--color-white);
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.employee-action-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.employee-action-btn-edit {
+  color: var(--color-green-600);
+}
+
+.employee-action-btn-edit:hover {
+  background: var(--color-primary-tint-2);
+  border-color: var(--color-primary);
+}
+
+.employee-action-btn-delete {
+  color: var(--color-danger);
+}
+
+.employee-action-btn-delete:hover {
+  background: #fdecea;
+  border-color: var(--color-danger);
+}
+
 .employee-empty-state {
   color: var(--color-text-muted-green);
   margin: 0;

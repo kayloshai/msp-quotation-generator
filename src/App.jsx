@@ -1465,8 +1465,28 @@ function App() {
                               <td>{employee.phone || 'No phone'}</td>
                               <td>
                                 <div className="employee-list-actions">
-                                  <button type="button" className="btn-secondary" onClick={() => startEditingEmployee(employee)}>Edit</button>
-                                  <button type="button" className="btn-delete" onClick={() => deleteEmployee(employee.id)}>Delete</button>
+                                  <button
+                                    type="button"
+                                    className="employee-action-btn employee-action-btn-edit"
+                                    onClick={() => startEditingEmployee(employee)}
+                                    aria-label={`Edit ${employee.name || 'employee'}`}
+                                    title="Edit employee"
+                                  >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                      <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l10.06-10.06.92.92L5.92 19.58zM20.71 5.63a1 1 0 0 0 0-1.41L19.78 3.29a1 1 0 0 0-1.41 0l-1.15 1.15 3.75 3.75 1.74-1.56z" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="employee-action-btn employee-action-btn-delete"
+                                    onClick={() => deleteEmployee(employee.id)}
+                                    aria-label={`Delete ${employee.name || 'employee'}`}
+                                    title="Delete employee"
+                                  >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                      <path d="M6 7h12l-1 14H7L6 7zm3-4h6l1 2h4v2H4V5h4l1-2z" />
+                                    </svg>
+                                  </button>
                                 </div>
                               </td>
                             </tr>
