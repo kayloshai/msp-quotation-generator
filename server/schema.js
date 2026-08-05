@@ -281,9 +281,13 @@ const loadBootstrap = async () => {
 }
 
 const replaceLabourPrices = async (items) => {
+  const deduped = Array.from(
+    new Map((items || []).map((row) => [String(row.title || '').trim(), row])).values()
+  ).filter((row) => row?.title)
+
   await run('DELETE FROM labour_prices')
 
-  for (const row of items) {
+  for (const row of deduped) {
     await run(
       `
         INSERT INTO labour_prices (

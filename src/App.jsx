@@ -93,9 +93,14 @@ function App() {
   const [labourPrices, setLabourPrices] = useState([])
   const [editingLabourId, setEditingLabourId] = useState(null)
   const [labourFormData, setLabourFormData] = useState({ title: '', normalHourlyRate: '', onsiteHourlyRate: '', breakdownHourlyRate: '' })
-  const labourTitleOptions = labourPrices
-    .map((labour) => labour.title)
-    .filter(Boolean)
+  const labourTitleOptions = Array.from(
+    new Map(
+      labourPrices
+        .map((labour) => String(labour.title || '').trim())
+        .filter(Boolean)
+        .map((title) => [title.toLowerCase(), title])
+    ).values()
+  )
   const [priceCalculatorStatus, setPriceCalculatorStatus] = useState('Manage labour pricing rates.')
   const [priceCalculatorOpen, setPriceCalculatorOpen] = useState(false)
   const [materialManagementStatus, setMaterialManagementStatus] = useState('Manage material pricing.')

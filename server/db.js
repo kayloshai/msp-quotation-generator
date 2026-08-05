@@ -234,6 +234,21 @@ export const initializeDatabase = async () => {
     )
   `)
 
+  // Keep one labour row per title to prevent duplicated role options across the app.
+  await run(`
+    DELETE FROM labour_prices
+    WHERE id NOT IN (
+      SELECT MIN(id)
+      FROM labour_prices
+      GROUP BY title
+    )
+  `)
+
+  await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_labour_prices_title_unique
+    ON labour_prices(title)
+  `)
+
   await run(`
     CREATE TABLE IF NOT EXISTS material_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,6 +259,20 @@ export const initializeDatabase = async () => {
       createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
+  `)
+
+  await run(`
+    DELETE FROM material_items
+    WHERE id NOT IN (
+      SELECT MIN(id)
+      FROM material_items
+      GROUP BY category, lower(trim(name)), price, COALESCE(note, '')
+    )
+  `)
+
+  await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_material_items_unique
+    ON material_items(category, lower(trim(name)), price, COALESCE(note, ''))
   `)
 
   await run(`
@@ -261,6 +290,33 @@ export const initializeDatabase = async () => {
   `)
 
   await run(`
+    DELETE FROM employees
+    WHERE id NOT IN (
+      SELECT MIN(id)
+      FROM employees
+      GROUP BY
+        lower(trim(name)),
+        lower(trim(role)),
+        trim(coyNumber),
+        lower(trim(COALESCE(department, ''))),
+        lower(trim(COALESCE(email, ''))),
+        trim(COALESCE(phone, ''))
+    )
+  `)
+
+  await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_exact_unique
+    ON employees(
+      lower(trim(name)),
+      lower(trim(role)),
+      trim(coyNumber),
+      lower(trim(COALESCE(department, ''))),
+      lower(trim(COALESCE(email, ''))),
+      trim(COALESCE(phone, ''))
+    )
+  `)
+
+  await run(`
     CREATE TABLE IF NOT EXISTS employee_hours (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       employeeName TEXT NOT NULL,
@@ -270,6 +326,20 @@ export const initializeDatabase = async () => {
       createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
+  `)
+
+  await run(`
+    DELETE FROM employee_hours
+    WHERE id NOT IN (
+      SELECT MIN(id)
+      FROM employee_hours
+      GROUP BY lower(trim(employeeName)), date, timeIn, timeOut
+    )
+  `)
+
+  await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_hours_unique
+    ON employee_hours(lower(trim(employeeName)), date, timeIn, timeOut)
   `)
 
   await run(`
@@ -284,6 +354,20 @@ export const initializeDatabase = async () => {
   `)
 
   await run(`
+    DELETE FROM current_project_hours
+    WHERE id NOT IN (
+      SELECT MIN(id)
+      FROM current_project_hours
+      GROUP BY lower(trim(employeeName)), hours, lower(trim(project))
+    )
+  `)
+
+  await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_current_project_hours_unique
+    ON current_project_hours(lower(trim(employeeName)), hours, lower(trim(project)))
+  `)
+
+  await run(`
     CREATE TABLE IF NOT EXISTS planned_project_hours (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       employeeName TEXT NOT NULL,
@@ -292,6 +376,20 @@ export const initializeDatabase = async () => {
       createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
+  `)
+
+  await run(`
+    DELETE FROM planned_project_hours
+    WHERE id NOT IN (
+      SELECT MIN(id)
+      FROM planned_project_hours
+      GROUP BY lower(trim(employeeName)), hours, lower(trim(project))
+    )
+  `)
+
+  await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_planned_project_hours_unique
+    ON planned_project_hours(lower(trim(employeeName)), hours, lower(trim(project)))
   `)
 
   await run(`

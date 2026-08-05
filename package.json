@@ -8,8 +8,11 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
-    "dev:api": "node server/index.js",
+    "dev:api": "node --env-file-if-exists=.env.local server/db-crypto.mjs unpack-if-needed && node --env-file-if-exists=.env.local server/index.js",
     "dev:all": "concurrently \"yarn dev\" \"yarn dev:api\"",
+    "db:check": "node server/check-db-integrity.mjs",
+    "db:pack": "node --env-file-if-exists=.env.local server/db-crypto.mjs pack",
+    "db:unpack": "node --env-file-if-exists=.env.local server/db-crypto.mjs unpack",
     "build": "vite build",
     "preview": "vite preview"
   },
