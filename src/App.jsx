@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { Fragment, useState, useEffect, useRef } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import './App.css'
@@ -1785,36 +1785,46 @@ function App() {
 
             <p className="time-log-status">{timeLogStatus}</p>
 
-            <div className="time-management-grid">
-              <div className="time-summary-card">
+            <div className="time-overview-grid">
+              <section className="time-overview-block">
                 <h3>Weekly effort</h3>
-                <div className="time-metric">
-                  <strong>12.5 hrs</strong>
-                  <span>Estimated this week</span>
+                <div className="time-kpi-grid">
+                  <div>
+                    <span>Estimated this week</span>
+                    <strong>12.5 hrs</strong>
+                  </div>
+                  <div>
+                    <span>Scheduled activities</span>
+                    <strong>{timeEntries.length} tasks</strong>
+                  </div>
                 </div>
-                <div className="time-metric">
-                  <strong>4 tasks</strong>
-                  <span>Scheduled activities</span>
-                </div>
-              </div>
+              </section>
 
-              <div className="time-list-card">
+              <section className="time-overview-block">
                 <h3>Upcoming activities</h3>
-                <ul className="time-list">
-                  {timeEntries.map((entry) => (
-                    <li key={entry.id} className="time-list-item">
-                      <div>
-                        <strong>{entry.title}</strong>
-                        <p>{entry.date}</p>
-                      </div>
-                      <div className="time-list-meta">
-                        <span>{entry.hours} hrs</span>
-                        <small>{entry.status}</small>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                <div className="time-table-wrap">
+                  <table className="time-grid-table">
+                    <thead>
+                      <tr>
+                        <th>Activity</th>
+                        <th>Date</th>
+                        <th>Hours</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {timeEntries.map((entry) => (
+                        <tr key={entry.id}>
+                          <td>{entry.title}</td>
+                          <td>{entry.date}</td>
+                          <td>{entry.hours} hrs</td>
+                          <td>{entry.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             </div>
 
             <div className="time-section-grid">
@@ -1823,61 +1833,95 @@ function App() {
                   <h3>Employee hours</h3>
                   <span>Attendance</span>
                 </div>
-                <div className="time-table">
-                  <div className="time-row time-row-head">
-                    <span>Name</span>
-                    <span>Date</span>
-                    <span>Time in</span>
-                    <span>Time out</span>
-                  </div>
-                  {employeeHours.map((entry) => (
-                    <div key={entry.id} className="time-row-wrapper">
-                      <div className="time-row">
-                        <span>{entry.name}</span>
-                        <span>{entry.date}</span>
-                        <span>{entry.timeIn}</span>
-                        <div className="time-row-actions">
-                          <span>{entry.timeOut}</span>
-                          <button type="button" className="btn-secondary" onClick={() => setEditingEmployeeId(entry.id)}>Edit</button>
-                        </div>
-                      </div>
-                      {editingEmployeeId === entry.id && (
-                        <div className="time-editor-panel">
-                          <div className="time-editor-grid">
-                            <select
-                              value={entry.name}
-                              onChange={(e) => updateEmployeeHour(entry.id, 'name', e.target.value)}
-                            >
-                              {employeeOptions.map((employee) => (
-                                <option key={employee.id} value={employee.name}>
-                                  {employee.name}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              type="date"
-                              value={entry.date}
-                              onChange={(e) => updateEmployeeHour(entry.id, 'date', e.target.value)}
-                            />
-                            <input
-                              type="time"
-                              value={entry.timeIn}
-                              onChange={(e) => updateEmployeeHour(entry.id, 'timeIn', e.target.value)}
-                            />
-                            <input
-                              type="time"
-                              value={entry.timeOut}
-                              onChange={(e) => updateEmployeeHour(entry.id, 'timeOut', e.target.value)}
-                            />
-                          </div>
-                          <div className="time-editor-actions">
-                            <button type="button" className="btn-delete" onClick={() => removeEmployeeHour(entry.id)}>Remove</button>
-                            <button type="button" className="btn-secondary" onClick={() => setEditingEmployeeId(null)}>Done</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                <div className="time-table-wrap">
+                  <table className="time-grid-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Date</th>
+                        <th>Time in</th>
+                        <th>Time out</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {employeeHours.map((entry) => (
+                        <Fragment key={entry.id}>
+                          <tr>
+                            <td>{entry.name}</td>
+                            <td>{entry.date}</td>
+                            <td>{entry.timeIn}</td>
+                            <td>{entry.timeOut}</td>
+                            <td>
+                              <div className="time-row-actions">
+                                <button
+                                  type="button"
+                                  className="employee-action-btn employee-action-btn-edit"
+                                  onClick={() => setEditingEmployeeId(entry.id)}
+                                  aria-label={`Edit ${entry.name || 'entry'}`}
+                                  title="Edit entry"
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l10.06-10.06.92.92L5.92 19.58zM20.71 5.63a1 1 0 0 0 0-1.41L19.78 3.29a1 1 0 0 0-1.41 0l-1.15 1.15 3.75 3.75 1.74-1.56z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="employee-action-btn employee-action-btn-delete"
+                                  onClick={() => removeEmployeeHour(entry.id)}
+                                  aria-label={`Delete ${entry.name || 'entry'}`}
+                                  title="Delete entry"
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M6 7h12l-1 14H7L6 7zm3-4h6l1 2h4v2H4V5h4l1-2z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          {editingEmployeeId === entry.id && (
+                            <tr className="time-editor-row">
+                              <td colSpan={5}>
+                                <div className="time-editor-panel">
+                                  <div className="time-editor-grid">
+                                    <select
+                                      value={entry.name}
+                                      onChange={(e) => updateEmployeeHour(entry.id, 'name', e.target.value)}
+                                    >
+                                      {employeeOptions.map((employee) => (
+                                        <option key={employee.id} value={employee.name}>
+                                          {employee.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="date"
+                                      value={entry.date}
+                                      onChange={(e) => updateEmployeeHour(entry.id, 'date', e.target.value)}
+                                    />
+                                    <input
+                                      type="time"
+                                      value={entry.timeIn}
+                                      onChange={(e) => updateEmployeeHour(entry.id, 'timeIn', e.target.value)}
+                                    />
+                                    <input
+                                      type="time"
+                                      value={entry.timeOut}
+                                      onChange={(e) => updateEmployeeHour(entry.id, 'timeOut', e.target.value)}
+                                    />
+                                  </div>
+                                  <div className="time-editor-actions">
+                                    <button type="button" className="btn-delete" onClick={() => removeEmployeeHour(entry.id)}>Remove</button>
+                                    <button type="button" className="btn-secondary" onClick={() => setEditingEmployeeId(null)}>Done</button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
                 <div className="time-form">
                   <select
@@ -1915,56 +1959,90 @@ function App() {
                   <h3>Current project hours</h3>
                   <span>Live allocation</span>
                 </div>
-                <div className="time-table">
-                  <div className="time-row time-row-head">
-                    <span>Employee</span>
-                    <span>Hours</span>
-                    <span>Project</span>
-                  </div>
-                  {currentProjectHours.map((entry) => (
-                    <div key={entry.id} className="time-row-wrapper">
-                      <div className="time-row">
-                        <span>{entry.name}</span>
-                        <span>{entry.hours}</span>
-                        <div className="time-row-actions">
-                          <span>{entry.project}</span>
-                          <button type="button" className="btn-secondary" onClick={() => setEditingCurrentProjectId(entry.id)}>Edit</button>
-                        </div>
-                      </div>
-                      {editingCurrentProjectId === entry.id && (
-                        <div className="time-editor-panel">
-                          <div className="time-editor-grid">
-                            <select
-                              value={entry.name}
-                              onChange={(e) => updateCurrentProjectHour(entry.id, 'name', e.target.value)}
-                            >
-                              {employeeOptions.map((employee) => (
-                                <option key={employee.id} value={employee.name}>
-                                  {employee.name}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              type="number"
-                              step="0.5"
-                              value={entry.hours}
-                              onChange={(e) => updateCurrentProjectHour(entry.id, 'hours', e.target.value)}
-                              placeholder="Hours"
-                            />
-                            <input
-                              value={entry.project}
-                              onChange={(e) => updateCurrentProjectHour(entry.id, 'project', e.target.value)}
-                              placeholder="Project"
-                            />
-                          </div>
-                          <div className="time-editor-actions">
-                            <button type="button" className="btn-delete" onClick={() => removeCurrentProjectHour(entry.id)}>Remove</button>
-                            <button type="button" className="btn-secondary" onClick={() => setEditingCurrentProjectId(null)}>Done</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                <div className="time-table-wrap">
+                  <table className="time-grid-table">
+                    <thead>
+                      <tr>
+                        <th>Employee</th>
+                        <th>Hours</th>
+                        <th>Project</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentProjectHours.map((entry) => (
+                        <Fragment key={entry.id}>
+                          <tr>
+                            <td>{entry.name}</td>
+                            <td>{entry.hours}</td>
+                            <td>{entry.project}</td>
+                            <td>
+                              <div className="time-row-actions">
+                                <button
+                                  type="button"
+                                  className="employee-action-btn employee-action-btn-edit"
+                                  onClick={() => setEditingCurrentProjectId(entry.id)}
+                                  aria-label={`Edit ${entry.name || 'entry'}`}
+                                  title="Edit entry"
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l10.06-10.06.92.92L5.92 19.58zM20.71 5.63a1 1 0 0 0 0-1.41L19.78 3.29a1 1 0 0 0-1.41 0l-1.15 1.15 3.75 3.75 1.74-1.56z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="employee-action-btn employee-action-btn-delete"
+                                  onClick={() => removeCurrentProjectHour(entry.id)}
+                                  aria-label={`Delete ${entry.name || 'entry'}`}
+                                  title="Delete entry"
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M6 7h12l-1 14H7L6 7zm3-4h6l1 2h4v2H4V5h4l1-2z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          {editingCurrentProjectId === entry.id && (
+                            <tr className="time-editor-row">
+                              <td colSpan={4}>
+                                <div className="time-editor-panel">
+                                  <div className="time-editor-grid time-editor-grid-three">
+                                    <select
+                                      value={entry.name}
+                                      onChange={(e) => updateCurrentProjectHour(entry.id, 'name', e.target.value)}
+                                    >
+                                      {employeeOptions.map((employee) => (
+                                        <option key={employee.id} value={employee.name}>
+                                          {employee.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      step="0.5"
+                                      value={entry.hours}
+                                      onChange={(e) => updateCurrentProjectHour(entry.id, 'hours', e.target.value)}
+                                      placeholder="Hours"
+                                    />
+                                    <input
+                                      value={entry.project}
+                                      onChange={(e) => updateCurrentProjectHour(entry.id, 'project', e.target.value)}
+                                      placeholder="Project"
+                                    />
+                                  </div>
+                                  <div className="time-editor-actions">
+                                    <button type="button" className="btn-delete" onClick={() => removeCurrentProjectHour(entry.id)}>Remove</button>
+                                    <button type="button" className="btn-secondary" onClick={() => setEditingCurrentProjectId(null)}>Done</button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
                 <div className="time-form">
                   <select
@@ -2000,56 +2078,90 @@ function App() {
                   <h3>Planned project hours</h3>
                   <span>Upcoming</span>
                 </div>
-                <div className="time-table">
-                  <div className="time-row time-row-head">
-                    <span>Employee</span>
-                    <span>Hours</span>
-                    <span>Project</span>
-                  </div>
-                  {plannedProjectHours.map((entry) => (
-                    <div key={entry.id} className="time-row-wrapper">
-                      <div className="time-row">
-                        <span>{entry.name}</span>
-                        <span>{entry.hours}</span>
-                        <div className="time-row-actions">
-                          <span>{entry.project}</span>
-                          <button type="button" className="btn-secondary" onClick={() => setEditingPlannedProjectId(entry.id)}>Edit</button>
-                        </div>
-                      </div>
-                      {editingPlannedProjectId === entry.id && (
-                        <div className="time-editor-panel">
-                          <div className="time-editor-grid">
-                            <select
-                              value={entry.name}
-                              onChange={(e) => updatePlannedProjectHour(entry.id, 'name', e.target.value)}
-                            >
-                              {employeeOptions.map((employee) => (
-                                <option key={employee.id} value={employee.name}>
-                                  {employee.name}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              type="number"
-                              step="0.5"
-                              value={entry.hours}
-                              onChange={(e) => updatePlannedProjectHour(entry.id, 'hours', e.target.value)}
-                              placeholder="Hours"
-                            />
-                            <input
-                              value={entry.project}
-                              onChange={(e) => updatePlannedProjectHour(entry.id, 'project', e.target.value)}
-                              placeholder="Project"
-                            />
-                          </div>
-                          <div className="time-editor-actions">
-                            <button type="button" className="btn-delete" onClick={() => removePlannedProjectHour(entry.id)}>Remove</button>
-                            <button type="button" className="btn-secondary" onClick={() => setEditingPlannedProjectId(null)}>Done</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                <div className="time-table-wrap">
+                  <table className="time-grid-table">
+                    <thead>
+                      <tr>
+                        <th>Employee</th>
+                        <th>Hours</th>
+                        <th>Project</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {plannedProjectHours.map((entry) => (
+                        <Fragment key={entry.id}>
+                          <tr>
+                            <td>{entry.name}</td>
+                            <td>{entry.hours}</td>
+                            <td>{entry.project}</td>
+                            <td>
+                              <div className="time-row-actions">
+                                <button
+                                  type="button"
+                                  className="employee-action-btn employee-action-btn-edit"
+                                  onClick={() => setEditingPlannedProjectId(entry.id)}
+                                  aria-label={`Edit ${entry.name || 'entry'}`}
+                                  title="Edit entry"
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l10.06-10.06.92.92L5.92 19.58zM20.71 5.63a1 1 0 0 0 0-1.41L19.78 3.29a1 1 0 0 0-1.41 0l-1.15 1.15 3.75 3.75 1.74-1.56z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="employee-action-btn employee-action-btn-delete"
+                                  onClick={() => removePlannedProjectHour(entry.id)}
+                                  aria-label={`Delete ${entry.name || 'entry'}`}
+                                  title="Delete entry"
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M6 7h12l-1 14H7L6 7zm3-4h6l1 2h4v2H4V5h4l1-2z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          {editingPlannedProjectId === entry.id && (
+                            <tr className="time-editor-row">
+                              <td colSpan={4}>
+                                <div className="time-editor-panel">
+                                  <div className="time-editor-grid time-editor-grid-three">
+                                    <select
+                                      value={entry.name}
+                                      onChange={(e) => updatePlannedProjectHour(entry.id, 'name', e.target.value)}
+                                    >
+                                      {employeeOptions.map((employee) => (
+                                        <option key={employee.id} value={employee.name}>
+                                          {employee.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      step="0.5"
+                                      value={entry.hours}
+                                      onChange={(e) => updatePlannedProjectHour(entry.id, 'hours', e.target.value)}
+                                      placeholder="Hours"
+                                    />
+                                    <input
+                                      value={entry.project}
+                                      onChange={(e) => updatePlannedProjectHour(entry.id, 'project', e.target.value)}
+                                      placeholder="Project"
+                                    />
+                                  </div>
+                                  <div className="time-editor-actions">
+                                    <button type="button" className="btn-delete" onClick={() => removePlannedProjectHour(entry.id)}>Remove</button>
+                                    <button type="button" className="btn-secondary" onClick={() => setEditingPlannedProjectId(null)}>Done</button>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
                 <div className="time-form">
                   <select
