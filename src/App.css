@@ -332,6 +332,12 @@
   font-weight: 600;
 }
 
+.time-table-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .time-table-wrap {
   width: 100%;
   overflow-x: auto;

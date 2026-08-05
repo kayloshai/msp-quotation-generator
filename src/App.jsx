@@ -168,8 +168,11 @@ function App() {
     return sanitizeEmployeeRoster(employeeData?.employees || [], initialLabourTitleOptions)
   })
   const [employeeForm, setEmployeeForm] = useState({ name: '', date: '', timeIn: '', timeOut: '' })
+  const [employeeHoursFormOpen, setEmployeeHoursFormOpen] = useState(true)
   const [currentProjectForm, setCurrentProjectForm] = useState({ name: '', hours: '', project: '' })
   const [plannedProjectForm, setPlannedProjectForm] = useState({ name: '', hours: '', project: '' })
+  const [currentProjectFormOpen, setCurrentProjectFormOpen] = useState(true)
+  const [plannedProjectFormOpen, setPlannedProjectFormOpen] = useState(true)
   const [employeeManagementForm, setEmployeeManagementForm] = useState({ name: '', role: '', coyNumber: '', department: '', email: '', phone: '' })
   const [employeeFileHandle, setEmployeeFileHandle] = useState(null)
   const [editingEmployeeId, setEditingEmployeeId] = useState(null)
@@ -1331,7 +1334,7 @@ function App() {
                     setEmployeeFormOpen(true)
                   }}
                 >
-                  {employeeFormOpen || editingEmployeeManagementId ? 'Hide add employee' : 'Add employee'}
+                  Add
                 </button>
               </div>
             </div>
@@ -1831,7 +1834,17 @@ function App() {
               <section className="time-table-card">
                 <div className="time-table-header">
                   <h3>Employee hours</h3>
-                  <span>Attendance</span>
+                  <div className="time-table-header-tools">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setEmployeeHoursFormOpen((prev) => !prev)}
+                    >
+                      Add
+                    </button>
+                    <span>Attendance</span>
+
+                  </div>
                 </div>
                 <div className="time-table-wrap">
                   <table className="time-grid-table">
@@ -1923,41 +1936,52 @@ function App() {
                     </tbody>
                   </table>
                 </div>
-                <div className="time-form">
-                  <select
-                    value={employeeForm.name}
-                    onChange={(e) => setEmployeeForm({ ...employeeForm, name: e.target.value })}
-                  >
-                    <option value="">Select employee</option>
-                    {employeeOptions.map((employee) => (
-                      <option key={employee.id} value={employee.name}>
-                        {employee.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="date"
-                    value={employeeForm.date}
-                    onChange={(e) => setEmployeeForm({ ...employeeForm, date: e.target.value })}
-                  />
-                  <input
-                    type="time"
-                    value={employeeForm.timeIn}
-                    onChange={(e) => setEmployeeForm({ ...employeeForm, timeIn: e.target.value })}
-                  />
-                  <input
-                    type="time"
-                    value={employeeForm.timeOut}
-                    onChange={(e) => setEmployeeForm({ ...employeeForm, timeOut: e.target.value })}
-                  />
-                  <button type="button" className="btn-add" onClick={addEmployeeHour}>Add</button>
-                </div>
+                {employeeHoursFormOpen && (
+                  <div className="time-form">
+                    <select
+                      value={employeeForm.name}
+                      onChange={(e) => setEmployeeForm({ ...employeeForm, name: e.target.value })}
+                    >
+                      <option value="">Select employee</option>
+                      {employeeOptions.map((employee) => (
+                        <option key={employee.id} value={employee.name}>
+                          {employee.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="date"
+                      value={employeeForm.date}
+                      onChange={(e) => setEmployeeForm({ ...employeeForm, date: e.target.value })}
+                    />
+                    <input
+                      type="time"
+                      value={employeeForm.timeIn}
+                      onChange={(e) => setEmployeeForm({ ...employeeForm, timeIn: e.target.value })}
+                    />
+                    <input
+                      type="time"
+                      value={employeeForm.timeOut}
+                      onChange={(e) => setEmployeeForm({ ...employeeForm, timeOut: e.target.value })}
+                    />
+                    <button type="button" className="btn-add" onClick={addEmployeeHour}>Add</button>
+                  </div>
+                )}
               </section>
 
               <section className="time-table-card">
                 <div className="time-table-header">
                   <h3>Current project hours</h3>
-                  <span>Live allocation</span>
+                  <div className="time-table-header-tools">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setCurrentProjectFormOpen((prev) => !prev)}
+                    >
+                      Add
+                    </button>
+                    <span>Live allocation</span>
+                  </div>
                 </div>
                 <div className="time-table-wrap">
                   <table className="time-grid-table">
@@ -2044,39 +2068,50 @@ function App() {
                     </tbody>
                   </table>
                 </div>
-                <div className="time-form">
-                  <select
-                    value={currentProjectForm.name}
-                    onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, name: e.target.value })}
-                  >
-                    <option value="">Select employee</option>
-                    {employeeOptions.map((employee) => (
-                      <option key={employee.id} value={employee.name}>
-                        {employee.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    step="0.5"
-                    placeholder="Hours"
-                    value={currentProjectForm.hours}
-                    onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, hours: e.target.value })}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Project"
-                    value={currentProjectForm.project}
-                    onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, project: e.target.value })}
-                  />
-                  <button type="button" className="btn-add" onClick={addCurrentProjectHour}>Add</button>
-                </div>
+                {currentProjectFormOpen && (
+                  <div className="time-form">
+                    <select
+                      value={currentProjectForm.name}
+                      onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, name: e.target.value })}
+                    >
+                      <option value="">Select employee</option>
+                      {employeeOptions.map((employee) => (
+                        <option key={employee.id} value={employee.name}>
+                          {employee.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="Hours"
+                      value={currentProjectForm.hours}
+                      onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, hours: e.target.value })}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Project"
+                      value={currentProjectForm.project}
+                      onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, project: e.target.value })}
+                    />
+                    <button type="button" className="btn-add" onClick={addCurrentProjectHour}>Add</button>
+                  </div>
+                )}
               </section>
 
               <section className="time-table-card">
                 <div className="time-table-header">
                   <h3>Planned project hours</h3>
-                  <span>Upcoming</span>
+                  <div className="time-table-header-tools">
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => setPlannedProjectFormOpen((prev) => !prev)}
+                    >
+                      Add
+                    </button>
+                    <span>Upcoming</span>
+                  </div>
                 </div>
                 <div className="time-table-wrap">
                   <table className="time-grid-table">
@@ -2163,33 +2198,35 @@ function App() {
                     </tbody>
                   </table>
                 </div>
-                <div className="time-form">
-                  <select
-                    value={plannedProjectForm.name}
-                    onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, name: e.target.value })}
-                  >
-                    <option value="">Select employee</option>
-                    {employeeOptions.map((employee) => (
-                      <option key={employee.id} value={employee.name}>
-                        {employee.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    step="0.5"
-                    placeholder="Hours"
-                    value={plannedProjectForm.hours}
-                    onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, hours: e.target.value })}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Project"
-                    value={plannedProjectForm.project}
-                    onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, project: e.target.value })}
-                  />
-                  <button type="button" className="btn-add" onClick={addPlannedProjectHour}>Add</button>
-                </div>
+                {plannedProjectFormOpen && (
+                  <div className="time-form">
+                    <select
+                      value={plannedProjectForm.name}
+                      onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, name: e.target.value })}
+                    >
+                      <option value="">Select employee</option>
+                      {employeeOptions.map((employee) => (
+                        <option key={employee.id} value={employee.name}>
+                          {employee.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="Hours"
+                      value={plannedProjectForm.hours}
+                      onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, hours: e.target.value })}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Project"
+                      value={plannedProjectForm.project}
+                      onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, project: e.target.value })}
+                    />
+                    <button type="button" className="btn-add" onClick={addPlannedProjectHour}>Add</button>
+                  </div>
+                )}
               </section>
             </div>
           </section>
