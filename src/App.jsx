@@ -2,18 +2,29 @@ import { Fragment, useState, useEffect, useRef } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import './App.css'
-import vendorData from '../vendor.json'
-import timeManagementData from './time-management-data.json'
-import employeeData from './employee.json'
-import labourPricesData from '../labour-prices.json'
-import materialPricesData from '../material-prices.json'
 
-const vendorOptions = vendorData?.vendors || []
 const validPages = ['builder', 'history', 'preview', 'time-management', 'employee-management', 'price-calculator']
-const initialLabourTitleOptions = (labourPricesData?.labourPrices || [])
-  .map((entry) => entry.title)
-  .filter(Boolean)
 const coyNumberPattern = /^\d{8}$/
+const graphqlEndpoint = import.meta.env.VITE_GRAPHQL_URL || 'http://localhost:4000/'
+
+const graphqlRequest = async (query, variables = {}) => {
+  const response = await fetch(graphqlEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables })
+  })
+
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed with status ${response.status}`)
+  }
+
+  const payload = await response.json()
+  if (payload.errors?.length) {
+    throw new Error(payload.errors[0].message || 'GraphQL request failed')
+  }
+
+  return payload.data
+}
 
 const sanitizeEmployeeRoster = (employees, validTitles) => {
   const allowedTitles = new Set(validTitles)
@@ -40,36 +51,15 @@ const normalizePageKey = (page) => {
   return validPages.includes(page) ? page : 'builder'
 }
 
-const getInitialActivePage = () => {
-  if (typeof window === 'undefined') {
-    return 'builder'
-  }
-
-  try {
-    const savedPage = localStorage.getItem('active-page')
-    return normalizePageKey(savedPage)
-  } catch (error) {
-    console.error('Failed to load saved page state', error)
-    return 'builder'
-  }
-}
-
-const initialTimeManagementData = timeManagementData || {}
-const initialTimeManagementState = {
-  employeeHours: initialTimeManagementData.employeeHours || [],
-  currentProjectHours: initialTimeManagementData.currentProjectHours || [],
-  plannedProjectHours: initialTimeManagementData.plannedProjectHours || [],
-  activityLog: initialTimeManagementData.activityLog || []
-}
-
 function App() {
   const quotationRef = useRef()
+  const [vendorOptions, setVendorOptions] = useState([])
   const [quotationNumber, setQuotationNumber] = useState('QUO1')
   const [quotationDate, setQuotationDate] = useState(new Date().toISOString().split('T')[0])
-  const [quotationTo, setQuotationTo] = useState(vendorOptions[0]?.quotationTo || '')
-  const [shippingAddress, setShippingAddress] = useState(vendorOptions[0]?.shippingAddress || '')
-  const [selectedQuotationVendorId, setSelectedQuotationVendorId] = useState(vendorOptions[0]?.id || '')
-  const [selectedShippingVendorId, setSelectedShippingVendorId] = useState(vendorOptions[0]?.id || '')
+  const [quotationTo, setQuotationTo] = useState('')
+  const [shippingAddress, setShippingAddress] = useState('')
+  const [selectedQuotationVendorId, setSelectedQuotationVendorId] = useState('')
+  const [selectedShippingVendorId, setSelectedShippingVendorId] = useState('')
   const [accordionOpen, setAccordionOpen] = useState(false)
   const [panelDescription, setPanelDescription] = useState('')
   const [panelStatus, setPanelStatus] = useState('')
@@ -78,95 +68,15 @@ function App() {
   const [quotationHistory, setQuotationHistory] = useState([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [selectedHistoryQuote, setSelectedHistoryQuote] = useState(null)
-  const [activePage, setActivePage] = useState(getInitialActivePage)
+  const [activePage, setActivePage] = useState('builder')
   const [pdfTemplateMode, setPdfTemplateMode] = useState('quote')
-  const [timeEntries, setTimeEntries] = useState([
-    { id: 1, title: 'Review client quote', date: '2026-07-29', hours: '2.5', status: 'Planned' },
-    { id: 2, title: 'Site coordination call', date: '2026-07-30', hours: '1.0', status: 'In progress' }
-  ])
-  const [employeeHours, setEmployeeHours] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const savedData = localStorage.getItem('time-management-data')
-        if (savedData) {
-          const parsed = JSON.parse(savedData)
-          if (Array.isArray(parsed.employeeHours)) {
-            return parsed.employeeHours
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load saved time management data', error)
-      }
-    }
-
-    return initialTimeManagementState.employeeHours
-  })
-  const [currentProjectHours, setCurrentProjectHours] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const savedData = localStorage.getItem('time-management-data')
-        if (savedData) {
-          const parsed = JSON.parse(savedData)
-          if (Array.isArray(parsed.currentProjectHours)) {
-            return parsed.currentProjectHours
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load saved time management data', error)
-      }
-    }
-
-    return initialTimeManagementState.currentProjectHours
-  })
-  const [plannedProjectHours, setPlannedProjectHours] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const savedData = localStorage.getItem('time-management-data')
-        if (savedData) {
-          const parsed = JSON.parse(savedData)
-          if (Array.isArray(parsed.plannedProjectHours)) {
-            return parsed.plannedProjectHours
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load saved time management data', error)
-      }
-    }
-
-    return initialTimeManagementState.plannedProjectHours
-  })
-  const [timeLogEntries, setTimeLogEntries] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const savedData = localStorage.getItem('time-management-data')
-        if (savedData) {
-          const parsed = JSON.parse(savedData)
-          if (Array.isArray(parsed.activityLog)) {
-            return parsed.activityLog
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load saved time management activity log', error)
-      }
-    }
-
-    return initialTimeManagementState.activityLog
-  })
-  const [timeLogStatus, setTimeLogStatus] = useState('Auto-saving changes locally.')
-  const [employeeOptions, setEmployeeOptions] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const savedEmployees = localStorage.getItem('employee-management-data')
-        if (savedEmployees) {
-          return sanitizeEmployeeRoster(JSON.parse(savedEmployees), initialLabourTitleOptions)
-        }
-      } catch (error) {
-        console.error('Failed to load saved employees', error)
-      }
-    }
-
-    return sanitizeEmployeeRoster(employeeData?.employees || [], initialLabourTitleOptions)
-  })
+  const [timeEntries, setTimeEntries] = useState([])
+  const [employeeHours, setEmployeeHours] = useState([])
+  const [currentProjectHours, setCurrentProjectHours] = useState([])
+  const [plannedProjectHours, setPlannedProjectHours] = useState([])
+  const [timeLogEntries, setTimeLogEntries] = useState([])
+  const [timeLogStatus, setTimeLogStatus] = useState('Loading data from database...')
+  const [employeeOptions, setEmployeeOptions] = useState([])
   const [employeeForm, setEmployeeForm] = useState({ name: '', date: '', timeIn: '', timeOut: '' })
   const [employeeHoursFormOpen, setEmployeeHoursFormOpen] = useState(true)
   const [currentProjectForm, setCurrentProjectForm] = useState({ name: '', hours: '', project: '' })
@@ -174,29 +84,13 @@ function App() {
   const [currentProjectFormOpen, setCurrentProjectFormOpen] = useState(true)
   const [plannedProjectFormOpen, setPlannedProjectFormOpen] = useState(true)
   const [employeeManagementForm, setEmployeeManagementForm] = useState({ name: '', role: '', coyNumber: '', department: '', email: '', phone: '' })
-  const [employeeFileHandle, setEmployeeFileHandle] = useState(null)
   const [editingEmployeeId, setEditingEmployeeId] = useState(null)
   const [editingEmployeeManagementId, setEditingEmployeeManagementId] = useState(null)
   const [employeeFormOpen, setEmployeeFormOpen] = useState(false)
   const [employeeManagementStatus, setEmployeeManagementStatus] = useState('Manage employees and keep the roster current.')
   const [editingCurrentProjectId, setEditingCurrentProjectId] = useState(null)
   const [editingPlannedProjectId, setEditingPlannedProjectId] = useState(null)
-  const [labourPrices, setLabourPrices] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const savedData = localStorage.getItem('labour-prices-data')
-        if (savedData) {
-          const parsed = JSON.parse(savedData).labourPrices || []
-          if (parsed.length > 0 && parsed[0].normalHourlyRate) {
-            return parsed
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load saved labour prices', error)
-      }
-    }
-    return labourPricesData?.labourPrices || []
-  })
+  const [labourPrices, setLabourPrices] = useState([])
   const [editingLabourId, setEditingLabourId] = useState(null)
   const [labourFormData, setLabourFormData] = useState({ title: '', normalHourlyRate: '', onsiteHourlyRate: '', breakdownHourlyRate: '' })
   const labourTitleOptions = labourPrices
@@ -206,136 +100,216 @@ function App() {
   const [priceCalculatorOpen, setPriceCalculatorOpen] = useState(false)
   const [materialManagementStatus, setMaterialManagementStatus] = useState('Manage material pricing.')
   const [materialManagementOpen, setMaterialManagementOpen] = useState(false)
-  const [plates, setPlates] = useState(materialPricesData?.materials?.plates || [])
+  const [plates, setPlates] = useState([])
   const [selectedPlate, setSelectedPlate] = useState(plates[0]?.id || null)
-  const [angleIron, setAngleIron] = useState(materialPricesData?.materials?.angleIron || [])
+  const [angleIron, setAngleIron] = useState([])
   const [selectedAngleIron, setSelectedAngleIron] = useState(angleIron[0]?.id || null)
-  const [linerPlates, setLinerPlates] = useState(materialPricesData?.materials?.linerPlates || [])
+  const [linerPlates, setLinerPlates] = useState([])
   const [selectedLinerPlate, setSelectedLinerPlate] = useState(linerPlates[0]?.id || null)
+  const [isDbHydrated, setIsDbHydrated] = useState(false)
   const [lineItems, setLineItems] = useState([
     { id: 1, qty: '', item: 'manufacture', description: '', unitPrice: '' }
   ])
 
-  // Initialize quotation number from localStorage
-  useEffect(() => {
-    const savedQuoNumber = localStorage.getItem('quoCounter')
-    const counter = savedQuoNumber ? parseInt(savedQuoNumber) + 1 : 1
-    localStorage.setItem('quoCounter', counter)
-    setQuotationNumber(`QUO${counter}`)
-  }, [])
+  const hydrateFromBootstrap = (bootstrap) => {
+    const incomingVendors = bootstrap.vendors || []
+    const incomingLabour = bootstrap.labourPrices || []
+    const labourTitles = incomingLabour.map((row) => row.title).filter(Boolean)
+    const incomingEmployees = sanitizeEmployeeRoster(bootstrap.employees || [], labourTitles)
 
-  useEffect(() => {
-    const savedPanel = localStorage.getItem('quotation-panel-data')
-    if (!savedPanel) return
+    setVendorOptions(incomingVendors)
+    setLabourPrices(incomingLabour)
+    setEmployeeOptions(incomingEmployees)
+    setEmployeeHours(bootstrap.employeeHours || [])
+    setCurrentProjectHours(bootstrap.currentProjectHours || [])
+    setPlannedProjectHours(bootstrap.plannedProjectHours || [])
+    setTimeEntries(bootstrap.timeEntries || [])
+    setTimeLogEntries(bootstrap.timeLogEntries || [])
+    setQuotationHistory(bootstrap.quotationHistory || [])
+    setPanelDescription(bootstrap.panelDescription || '')
 
-    try {
-      const parsed = JSON.parse(savedPanel)
-      setPanelDescription(parsed.description || '')
-    } catch (error) {
-      console.error('Failed to load saved panel data', error)
-    }
-  }, [])
+    const materialItems = bootstrap.materialItems || []
+    const nextPlates = materialItems.filter((item) => item.category === 'plates')
+    const nextAngleIron = materialItems.filter((item) => item.category === 'angleIron')
+    const nextLinerPlates = materialItems.filter((item) => item.category === 'linerPlates')
+    setPlates(nextPlates)
+    setSelectedPlate(nextPlates[0]?.id || null)
+    setAngleIron(nextAngleIron)
+    setSelectedAngleIron(nextAngleIron[0]?.id || null)
+    setLinerPlates(nextLinerPlates)
+    setSelectedLinerPlate(nextLinerPlates[0]?.id || null)
 
-  useEffect(() => {
-    const savedHistory = localStorage.getItem('quotation-history')
-    if (!savedHistory) return
+    const initialPage = normalizePageKey(bootstrap.activePage)
+    setActivePage(initialPage)
 
-    try {
-      setQuotationHistory(JSON.parse(savedHistory))
-    } catch (error) {
-      console.error('Failed to load quotation history', error)
-    }
-  }, [])
-
-  useEffect(() => {
-    const jsonLabourPrices = labourPricesData?.labourPrices || []
-    const jsonLabourTitles = jsonLabourPrices.map((entry) => entry.title).filter(Boolean)
-    const jsonEmployees = sanitizeEmployeeRoster(employeeData?.employees || [], jsonLabourTitles)
-    const jsonTimeData = {
-      employeeHours: initialTimeManagementState.employeeHours,
-      currentProjectHours: initialTimeManagementState.currentProjectHours,
-      plannedProjectHours: initialTimeManagementState.plannedProjectHours,
-      activityLog: initialTimeManagementState.activityLog,
-      updatedAt: new Date().toISOString()
-    }
-
-    setLabourPrices(jsonLabourPrices)
-    setEmployeeOptions(jsonEmployees)
-    setEmployeeHours(jsonTimeData.employeeHours)
-    setCurrentProjectHours(jsonTimeData.currentProjectHours)
-    setPlannedProjectHours(jsonTimeData.plannedProjectHours)
-    setTimeLogEntries(jsonTimeData.activityLog)
-
-    const jsonPlates = materialPricesData?.materials?.plates || []
-    const jsonAngleIron = materialPricesData?.materials?.angleIron || []
-    const jsonLinerPlates = materialPricesData?.materials?.linerPlates || []
-    setPlates(jsonPlates)
-    setSelectedPlate(jsonPlates[0]?.id || null)
-    setAngleIron(jsonAngleIron)
-    setSelectedAngleIron(jsonAngleIron[0]?.id || null)
-    setLinerPlates(jsonLinerPlates)
-    setSelectedLinerPlate(jsonLinerPlates[0]?.id || null)
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('employee-management-data', JSON.stringify(jsonEmployees))
-      localStorage.setItem('labour-prices-data', JSON.stringify({
-        generatedAt: new Date().toISOString(),
-        labourPrices: jsonLabourPrices
-      }))
-      localStorage.setItem('time-management-data', JSON.stringify(jsonTimeData))
-    }
-  }, [])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('active-page', normalizePageKey(activePage))
-    }
-  }, [activePage])
-
-  const hasHydratedTimeManagementRef = useRef(false)
-
-  const persistTimeManagementData = (payload) => {
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('time-management-data', JSON.stringify(payload))
-        setTimeLogStatus('Auto-saved time-management changes locally.')
-      }
-    } catch (error) {
-      console.error('Unable to save time management data', error)
-      setTimeLogStatus('Auto-save failed.')
-    }
+    const firstVendor = incomingVendors[0]
+    setSelectedQuotationVendorId(firstVendor?.id || '')
+    setSelectedShippingVendorId(firstVendor?.id || '')
+    setQuotationTo(firstVendor?.quotationTo || '')
+    setShippingAddress(firstVendor?.shippingAddress || '')
   }
 
   useEffect(() => {
-    if (!hasHydratedTimeManagementRef.current) {
-      hasHydratedTimeManagementRef.current = true
-      return
+    let isCancelled = false
+
+    const loadFromDatabase = async () => {
+      try {
+        const legacyInput = typeof window === 'undefined'
+          ? {}
+          : {
+            employeeManagementData: localStorage.getItem('employee-management-data'),
+            timeManagementData: localStorage.getItem('time-management-data'),
+            labourPricesData: localStorage.getItem('labour-prices-data'),
+            quotationHistory: localStorage.getItem('quotation-history'),
+            quotationPanelData: localStorage.getItem('quotation-panel-data'),
+            activePage: localStorage.getItem('active-page'),
+            quoCounter: localStorage.getItem('quoCounter')
+          }
+
+        const hasLegacyData = Object.values(legacyInput).some((value) => value)
+        const operation = hasLegacyData
+          ? `
+              mutation MigrateLegacyData($input: LegacyDataInput) {
+                migrateLegacyData(input: $input) {
+                  activePage
+                  quotationCounter
+                  panelDescription
+                  quotationHistory {
+                    id
+                    quotationNumber
+                    dateCreated
+                    timeCreated
+                    quotationTo
+                    shippingAddress
+                    totalPrice
+                    savedAt
+                    fileName
+                    pdfPreviewUrl
+                  }
+                  vendors { id company vatNumber quotationTo shippingAddress }
+                  labourPrices {
+                    id
+                    title
+                    normalHourlyRate
+                    normalDaily7
+                    normalDaily11
+                    onsiteHourlyRate
+                    onsiteDaily7
+                    onsiteDaily11
+                    breakdownHourlyRate
+                    breakdownDaily7
+                    breakdownDaily11
+                    normalHours
+                    mineHours
+                  }
+                  materialItems { id category name price note }
+                  employees { id name role coyNumber department email phone createdAt updatedAt }
+                  employeeHours { id name date timeIn timeOut createdAt updatedAt }
+                  currentProjectHours { id name hours project createdAt updatedAt }
+                  plannedProjectHours { id name hours project createdAt updatedAt }
+                  timeEntries { id title date hours status }
+                  timeLogEntries { id action group section timestamp details }
+                }
+              }
+            `
+          : `
+              query Bootstrap {
+                bootstrap {
+                  activePage
+                  quotationCounter
+                  panelDescription
+                  quotationHistory {
+                    id
+                    quotationNumber
+                    dateCreated
+                    timeCreated
+                    quotationTo
+                    shippingAddress
+                    totalPrice
+                    savedAt
+                    fileName
+                    pdfPreviewUrl
+                  }
+                  vendors { id company vatNumber quotationTo shippingAddress }
+                  labourPrices {
+                    id
+                    title
+                    normalHourlyRate
+                    normalDaily7
+                    normalDaily11
+                    onsiteHourlyRate
+                    onsiteDaily7
+                    onsiteDaily11
+                    breakdownHourlyRate
+                    breakdownDaily7
+                    breakdownDaily11
+                    normalHours
+                    mineHours
+                  }
+                  materialItems { id category name price note }
+                  employees { id name role coyNumber department email phone createdAt updatedAt }
+                  employeeHours { id name date timeIn timeOut createdAt updatedAt }
+                  currentProjectHours { id name hours project createdAt updatedAt }
+                  plannedProjectHours { id name hours project createdAt updatedAt }
+                  timeEntries { id title date hours status }
+                  timeLogEntries { id action group section timestamp details }
+                }
+              }
+            `
+
+        const variables = hasLegacyData ? { input: legacyInput } : {}
+        const data = await graphqlRequest(operation, variables)
+        const bootstrap = data.migrateLegacyData || data.bootstrap
+
+        if (isCancelled || !bootstrap) return
+
+        hydrateFromBootstrap(bootstrap)
+
+        const nextCounter = (bootstrap.quotationCounter || 0) + 1
+        setQuotationNumber(`QUO${nextCounter}`)
+        await graphqlRequest(
+          `mutation SetQuotationCounter($counter: Int!) { setQuotationCounter(counter: $counter) }`,
+          { counter: nextCounter }
+        )
+
+        setTimeLogStatus('Data loaded from database.')
+        setIsDbHydrated(true)
+
+        if (hasLegacyData && typeof window !== 'undefined') {
+          localStorage.removeItem('employee-management-data')
+          localStorage.removeItem('time-management-data')
+          localStorage.removeItem('labour-prices-data')
+          localStorage.removeItem('quotation-history')
+          localStorage.removeItem('quotation-panel-data')
+          localStorage.removeItem('active-page')
+          localStorage.removeItem('quoCounter')
+        }
+      } catch (error) {
+        console.error('Failed to load data from GraphQL API', error)
+        setTimeLogStatus('Database sync failed. Ensure API is running.')
+      }
     }
 
-    const payload = {
-      employeeHours,
-      currentProjectHours,
-      plannedProjectHours,
-      activityLog: timeLogEntries,
-      updatedAt: new Date().toISOString()
-    }
+    void loadFromDatabase()
 
-    persistTimeManagementData(payload)
-  }, [employeeHours, currentProjectHours, plannedProjectHours, timeLogEntries])
+    return () => {
+      isCancelled = true
+    }
+  }, [])
 
   useEffect(() => {
-    setEmployeeOptions((prev) => {
-      const sanitized = sanitizeEmployeeRoster(prev, labourTitleOptions)
-      if (JSON.stringify(prev) === JSON.stringify(sanitized)) {
-        return prev
-      }
+    if (!isDbHydrated) return
 
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('employee-management-data', JSON.stringify(sanitized))
-      }
-
-      return sanitized
+    void graphqlRequest(
+      `mutation SetActivePage($page: String!) { setActivePage(page: $page) }`,
+      { page: normalizePageKey(activePage) }
+    ).catch((error) => {
+      console.error('Failed to persist active page', error)
     })
+  }, [activePage, isDbHydrated])
+
+  useEffect(() => {
+    setEmployeeOptions((prev) => sanitizeEmployeeRoster(prev, labourTitleOptions))
   }, [labourTitleOptions])
 
   const itemOptions = [
@@ -408,189 +382,237 @@ function App() {
     }
 
     setTimeLogEntries((prev) => [entry, ...prev].slice(0, 200))
+
+    try {
+      await graphqlRequest(
+        `
+          mutation AddTimeLogEntry($input: TimeLogEntryInput!) {
+            addTimeLogEntry(input: $input) { id }
+          }
+        `,
+        {
+          input: {
+            id: entry.id,
+            action: entry.action,
+            group: entry.group,
+            section: entry.section,
+            timestamp: entry.timestamp,
+            details: JSON.stringify(details || {})
+          }
+        }
+      )
+    } catch (error) {
+      console.error('Failed to persist time log entry', error)
+    }
   }
 
-  const addEmployeeHour = () => {
+  const addEmployeeHour = async () => {
     if (!employeeForm.name || !employeeForm.date || !employeeForm.timeIn || !employeeForm.timeOut) return
-    const newEntry = {
-      id: Date.now(),
-      name: employeeForm.name,
-      date: employeeForm.date,
-      timeIn: employeeForm.timeIn,
-      timeOut: employeeForm.timeOut
-    }
-    setEmployeeHours([newEntry, ...employeeHours])
+
+    const data = await graphqlRequest(
+      `
+        mutation AddEmployeeHour($input: EmployeeHourInput!) {
+          addEmployeeHour(input: $input) { id name date timeIn timeOut createdAt updatedAt }
+        }
+      `,
+      {
+        input: {
+          employeeName: employeeForm.name,
+          date: employeeForm.date,
+          timeIn: employeeForm.timeIn,
+          timeOut: employeeForm.timeOut
+        }
+      }
+    )
+
+    const newEntry = data.addEmployeeHour
+    setEmployeeHours((prev) => [newEntry, ...prev])
     setEmployeeForm({ name: '', date: '', timeIn: '', timeOut: '' })
     void appendTimeLogEntry('add', 'employee-hours', { entry: newEntry })
   }
 
-  const updateEmployeeHour = (id, field, value) => {
-    setEmployeeHours((prev) => {
-      const currentEntry = prev.find((item) => item.id === id)
-      const nextEntries = prev.map((item) => item.id === id ? { ...item, [field]: value } : item)
-      if (currentEntry && currentEntry[field] !== value) {
-        void appendTimeLogEntry('edit', 'employee-hours', {
-          itemId: id,
-          field,
-          previousValue: currentEntry[field],
-          newValue: value
-        })
+  const updateEmployeeHour = async (id, field, value) => {
+    const currentEntry = employeeHours.find((item) => item.id === id)
+    if (!currentEntry) return
+
+    const nextEntry = { ...currentEntry, [field]: value }
+    const data = await graphqlRequest(
+      `
+        mutation UpdateEmployeeHour($id: ID!, $input: EmployeeHourInput!) {
+          updateEmployeeHour(id: $id, input: $input) { id name date timeIn timeOut createdAt updatedAt }
+        }
+      `,
+      {
+        id,
+        input: {
+          employeeName: nextEntry.name,
+          date: nextEntry.date,
+          timeIn: nextEntry.timeIn,
+          timeOut: nextEntry.timeOut
+        }
       }
-      return nextEntries
-    })
+    )
+
+    setEmployeeHours((prev) => prev.map((item) => (item.id === id ? data.updateEmployeeHour : item)))
+
+    if (currentEntry[field] !== value) {
+      void appendTimeLogEntry('edit', 'employee-hours', {
+        itemId: id,
+        field,
+        previousValue: currentEntry[field],
+        newValue: value
+      })
+    }
   }
 
-  const removeEmployeeHour = (id) => {
+  const removeEmployeeHour = async (id) => {
     const entryToRemove = employeeHours.find((item) => item.id === id)
+    await graphqlRequest(
+      `mutation DeleteEmployeeHour($id: ID!) { deleteEmployeeHour(id: $id) }`,
+      { id }
+    )
     setEmployeeHours(employeeHours.filter((item) => item.id !== id))
     if (entryToRemove) {
       void appendTimeLogEntry('remove', 'employee-hours', { itemId: id, entry: entryToRemove })
     }
   }
 
-  const addCurrentProjectHour = () => {
+  const addCurrentProjectHour = async () => {
     if (!currentProjectForm.name || !currentProjectForm.hours || !currentProjectForm.project) return
-    const newEntry = {
-      id: Date.now(),
-      name: currentProjectForm.name,
-      hours: currentProjectForm.hours,
-      project: currentProjectForm.project
-    }
-    setCurrentProjectHours([newEntry, ...currentProjectHours])
+
+    const data = await graphqlRequest(
+      `
+        mutation AddCurrentProjectHour($input: ProjectHourInput!) {
+          addCurrentProjectHour(input: $input) { id name hours project createdAt updatedAt }
+        }
+      `,
+      {
+        input: {
+          employeeName: currentProjectForm.name,
+          hours: parseFloat(currentProjectForm.hours),
+          project: currentProjectForm.project
+        }
+      }
+    )
+
+    const newEntry = data.addCurrentProjectHour
+    setCurrentProjectHours((prev) => [newEntry, ...prev])
     setCurrentProjectForm({ name: '', hours: '', project: '' })
     void appendTimeLogEntry('add', 'current-project-hours', { entry: newEntry })
   }
 
-  const updateCurrentProjectHour = (id, field, value) => {
-    setCurrentProjectHours((prev) => {
-      const currentEntry = prev.find((item) => item.id === id)
-      const nextEntries = prev.map((item) => item.id === id ? { ...item, [field]: value } : item)
-      if (currentEntry && currentEntry[field] !== value) {
-        void appendTimeLogEntry('edit', 'current-project-hours', {
-          itemId: id,
-          field,
-          previousValue: currentEntry[field],
-          newValue: value
-        })
+  const updateCurrentProjectHour = async (id, field, value) => {
+    const currentEntry = currentProjectHours.find((item) => item.id === id)
+    if (!currentEntry) return
+
+    const nextEntry = { ...currentEntry, [field]: value }
+    const data = await graphqlRequest(
+      `
+        mutation UpdateCurrentProjectHour($id: ID!, $input: ProjectHourInput!) {
+          updateCurrentProjectHour(id: $id, input: $input) { id name hours project createdAt updatedAt }
+        }
+      `,
+      {
+        id,
+        input: {
+          employeeName: nextEntry.name,
+          hours: parseFloat(nextEntry.hours) || 0,
+          project: nextEntry.project
+        }
       }
-      return nextEntries
-    })
+    )
+
+    setCurrentProjectHours((prev) => prev.map((item) => (item.id === id ? data.updateCurrentProjectHour : item)))
+
+    if (currentEntry[field] !== value) {
+      void appendTimeLogEntry('edit', 'current-project-hours', {
+        itemId: id,
+        field,
+        previousValue: currentEntry[field],
+        newValue: value
+      })
+    }
   }
 
-  const removeCurrentProjectHour = (id) => {
+  const removeCurrentProjectHour = async (id) => {
     const entryToRemove = currentProjectHours.find((item) => item.id === id)
+    await graphqlRequest(
+      `mutation DeleteCurrentProjectHour($id: ID!) { deleteCurrentProjectHour(id: $id) }`,
+      { id }
+    )
     setCurrentProjectHours(currentProjectHours.filter((item) => item.id !== id))
     if (entryToRemove) {
       void appendTimeLogEntry('remove', 'current-project-hours', { itemId: id, entry: entryToRemove })
     }
   }
 
-  const addPlannedProjectHour = () => {
+  const addPlannedProjectHour = async () => {
     if (!plannedProjectForm.name || !plannedProjectForm.hours || !plannedProjectForm.project) return
-    const newEntry = {
-      id: Date.now(),
-      name: plannedProjectForm.name,
-      hours: plannedProjectForm.hours,
-      project: plannedProjectForm.project
-    }
-    setPlannedProjectHours([newEntry, ...plannedProjectHours])
+
+    const data = await graphqlRequest(
+      `
+        mutation AddPlannedProjectHour($input: ProjectHourInput!) {
+          addPlannedProjectHour(input: $input) { id name hours project createdAt updatedAt }
+        }
+      `,
+      {
+        input: {
+          employeeName: plannedProjectForm.name,
+          hours: parseFloat(plannedProjectForm.hours),
+          project: plannedProjectForm.project
+        }
+      }
+    )
+
+    const newEntry = data.addPlannedProjectHour
+    setPlannedProjectHours((prev) => [newEntry, ...prev])
     setPlannedProjectForm({ name: '', hours: '', project: '' })
     void appendTimeLogEntry('add', 'planned-project-hours', { entry: newEntry })
   }
 
-  const updatePlannedProjectHour = (id, field, value) => {
-    setPlannedProjectHours((prev) => {
-      const currentEntry = prev.find((item) => item.id === id)
-      const nextEntries = prev.map((item) => item.id === id ? { ...item, [field]: value } : item)
-      if (currentEntry && currentEntry[field] !== value) {
-        void appendTimeLogEntry('edit', 'planned-project-hours', {
-          itemId: id,
-          field,
-          previousValue: currentEntry[field],
-          newValue: value
-        })
+  const updatePlannedProjectHour = async (id, field, value) => {
+    const currentEntry = plannedProjectHours.find((item) => item.id === id)
+    if (!currentEntry) return
+
+    const nextEntry = { ...currentEntry, [field]: value }
+    const data = await graphqlRequest(
+      `
+        mutation UpdatePlannedProjectHour($id: ID!, $input: ProjectHourInput!) {
+          updatePlannedProjectHour(id: $id, input: $input) { id name hours project createdAt updatedAt }
+        }
+      `,
+      {
+        id,
+        input: {
+          employeeName: nextEntry.name,
+          hours: parseFloat(nextEntry.hours) || 0,
+          project: nextEntry.project
+        }
       }
-      return nextEntries
-    })
+    )
+
+    setPlannedProjectHours((prev) => prev.map((item) => (item.id === id ? data.updatePlannedProjectHour : item)))
+
+    if (currentEntry[field] !== value) {
+      void appendTimeLogEntry('edit', 'planned-project-hours', {
+        itemId: id,
+        field,
+        previousValue: currentEntry[field],
+        newValue: value
+      })
+    }
   }
 
-  const removePlannedProjectHour = (id) => {
+  const removePlannedProjectHour = async (id) => {
     const entryToRemove = plannedProjectHours.find((item) => item.id === id)
+    await graphqlRequest(
+      `mutation DeletePlannedProjectHour($id: ID!) { deletePlannedProjectHour(id: $id) }`,
+      { id }
+    )
     setPlannedProjectHours(plannedProjectHours.filter((item) => item.id !== id))
     if (entryToRemove) {
       void appendTimeLogEntry('remove', 'planned-project-hours', { itemId: id, entry: entryToRemove })
     }
-  }
-
-  const persistEmployeesToFile = async (employeesToSave) => {
-    const payload = JSON.stringify({ generatedAt: new Date().toISOString(), employees: employeesToSave }, null, 2)
-
-    try {
-      if (typeof window !== 'undefined' && ('showOpenFilePicker' in window || 'showSaveFilePicker' in window)) {
-        let handle = employeeFileHandle
-
-        if (!handle) {
-          if ('showOpenFilePicker' in window) {
-            const [pickedHandle] = await window.showOpenFilePicker({
-              multiple: false,
-              excludeAcceptAllOption: true,
-              types: [{ description: 'JSON Files', accept: { 'application/json': ['.json'] } }]
-            })
-            handle = pickedHandle
-          } else {
-            handle = await window.showSaveFilePicker({
-              suggestedName: 'employee.json',
-              types: [{ description: 'JSON Files', accept: { 'application/json': ['.json'] } }]
-            })
-          }
-
-          if (handle?.requestPermission) {
-            const permission = await handle.requestPermission({ mode: 'readwrite' })
-            if (permission !== 'granted') {
-              throw new Error('Read/write permission denied for selected file.')
-            }
-          }
-
-          setEmployeeFileHandle(handle)
-        }
-
-        const writable = await handle.createWritable()
-        await writable.write(payload)
-        await writable.close()
-        setEmployeeManagementStatus('Employee file overwritten successfully.')
-        return true
-      } else {
-        const blob = new Blob([payload], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = 'employee.json'
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-        setEmployeeManagementStatus('Downloaded employee.json (browser fallback).')
-        return false
-      }
-    } catch (error) {
-      console.error('Unable to save employee JSON file', error)
-      setEmployeeManagementStatus('File save cancelled or blocked.')
-      return false
-    }
-  }
-
-  const saveEmployeesToJson = async () => {
-    const sanitized = sanitizeEmployeeRoster(employeeOptions, labourTitleOptions)
-    setEmployeeOptions(sanitized)
-    const savedToFile = await persistEmployeesToFile(sanitized)
-
-    if (savedToFile) {
-      localStorage.setItem('employee-management-data', JSON.stringify(sanitized))
-      return
-    }
-
-    localStorage.setItem('employee-management-data', JSON.stringify(sanitized))
-    setEmployeeManagementStatus('Saved locally only. Link employee.json and press Save JSON again.')
   }
 
   const resetEmployeeManagementForm = () => {
@@ -599,7 +621,7 @@ function App() {
     setEmployeeFormOpen(false)
   }
 
-  const handleEmployeeManagementSubmit = (event) => {
+  const handleEmployeeManagementSubmit = async (event) => {
     event.preventDefault()
 
     if (!labourTitleOptions.includes(employeeManagementForm.role)) {
@@ -618,24 +640,41 @@ function App() {
     }
 
     if (editingEmployeeManagementId) {
-      const nextEmployees = sanitizeEmployeeRoster(employeeOptions.map((employee) => (
-        employee.id === editingEmployeeManagementId
-          ? { ...employee, ...employeeManagementForm }
-          : employee
-      )), labourTitleOptions)
+      const data = await graphqlRequest(
+        `
+          mutation UpdateEmployee($id: ID!, $input: EmployeeInput!) {
+            updateEmployee(id: $id, input: $input) { id name role coyNumber department email phone createdAt updatedAt }
+          }
+        `,
+        {
+          id: editingEmployeeManagementId,
+          input: employeeManagementForm
+        }
+      )
+
+      const nextEmployees = sanitizeEmployeeRoster(
+        employeeOptions.map((employee) => (
+          employee.id === editingEmployeeManagementId ? data.updateEmployee : employee
+        )),
+        labourTitleOptions
+      )
 
       setEmployeeOptions(nextEmployees)
-      localStorage.setItem('employee-management-data', JSON.stringify(nextEmployees))
-      setEmployeeManagementStatus('Employee updated. Click Save JSON to write file.')
+      setEmployeeManagementStatus('Employee updated in the database.')
     } else {
-      const newEmployee = {
-        id: Date.now(),
-        ...employeeManagementForm
-      }
+      const data = await graphqlRequest(
+        `
+          mutation AddEmployee($input: EmployeeInput!) {
+            addEmployee(input: $input) { id name role coyNumber department email phone createdAt updatedAt }
+          }
+        `,
+        { input: employeeManagementForm }
+      )
+
+      const newEmployee = data.addEmployee
       const nextEmployees = sanitizeEmployeeRoster([newEmployee, ...employeeOptions], labourTitleOptions)
       setEmployeeOptions(nextEmployees)
-      localStorage.setItem('employee-management-data', JSON.stringify(nextEmployees))
-      setEmployeeManagementStatus('Employee added. Click Save JSON to write file.')
+      setEmployeeManagementStatus('Employee added to the database.')
     }
 
     resetEmployeeManagementForm()
@@ -654,11 +693,11 @@ function App() {
     })
   }
 
-  const deleteEmployee = (id) => {
+  const deleteEmployee = async (id) => {
+    await graphqlRequest(`mutation DeleteEmployee($id: ID!) { deleteEmployee(id: $id) }`, { id })
     const nextEmployees = employeeOptions.filter((employee) => employee.id !== id)
     setEmployeeOptions(nextEmployees)
-    localStorage.setItem('employee-management-data', JSON.stringify(nextEmployees))
-    setEmployeeManagementStatus('Employee removed. Click Save JSON to write file.')
+    setEmployeeManagementStatus('Employee removed from the database.')
 
     if (editingEmployeeManagementId === id) {
       resetEmployeeManagementForm()
@@ -694,50 +733,27 @@ function App() {
     setEditingLabourId(null)
   }
 
-  const saveLabourPrices = () => {
-    const payload = { generatedAt: new Date().toISOString(), labourPrices }
-    localStorage.setItem('labour-prices-data', JSON.stringify(payload))
-    setPriceCalculatorStatus('Labour prices saved locally.')
+  const saveLabourPrices = async () => {
+    const data = await graphqlRequest(
+      `
+        mutation SaveLabourPrices($items: [LabourPriceInput!]!) {
+          saveLabourPrices(items: $items) { id }
+        }
+      `,
+      { items: labourPrices }
+    )
+
+    if (data?.saveLabourPrices) {
+      setPriceCalculatorStatus('Labour prices saved to database.')
+    }
   }
 
-  const savePanelToJson = async () => {
-    const payload = {
-      description: panelDescription,
-      updatedAt: new Date().toISOString()
-    }
-    const json = JSON.stringify(payload, null, 2)
-
-    localStorage.setItem('quotation-panel-data', json)
-
-    try {
-      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: 'quotation-panel.json',
-          types: [{
-            description: 'JSON Files',
-            accept: { 'application/json': ['.json'] }
-          }]
-        })
-        const writable = await handle.createWritable()
-        await writable.write(json)
-        await writable.close()
-        setPanelStatus('Saved to JSON file.')
-      } else {
-        const blob = new Blob([json], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = 'quotation-panel.json'
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-        setPanelStatus('Downloaded JSON file.')
-      }
-    } catch (error) {
-      console.error('Unable to save JSON file', error)
-      setPanelStatus('Saved locally. File picker was cancelled.')
-    }
+  const savePanelDescription = async () => {
+    await graphqlRequest(
+      `mutation SetPanelDescription($description: String!) { setPanelDescription(description: $description) }`,
+      { description: panelDescription }
+    )
+    setPanelStatus('Panel description saved to the database.')
   }
 
   const pickSaveLocation = async () => {
@@ -749,7 +765,16 @@ function App() {
   const saveQuotationHistory = (quoteData) => {
     const nextHistory = [quoteData, ...quotationHistory].slice(0, 20)
     setQuotationHistory(nextHistory)
-    localStorage.setItem('quotation-history', JSON.stringify(nextHistory))
+    void graphqlRequest(
+      `
+        mutation SaveQuotationHistory($items: [QuotationHistoryInput!]!) {
+          saveQuotationHistory(items: $items) { id }
+        }
+      `,
+      { items: nextHistory }
+    ).catch((error) => {
+      console.error('Failed to save quotation history', error)
+    })
     return quoteData
   }
 
@@ -1145,12 +1170,12 @@ function App() {
                           value={panelDescription}
                           onChange={(e) => setPanelDescription(e.target.value)}
                           rows="6"
-                          placeholder="Enter description for the JSON panel"
+                          placeholder="Enter description for the quotation panel"
                         />
 
                         <div className="accordion-actions">
-                          <button type="button" className="btn-save-json" onClick={savePanelToJson}>
-                            Save to JSON
+                          <button type="button" className="btn-save-json" onClick={savePanelDescription}>
+                            Save panel
                           </button>
                           {panelStatus ? <span className="save-status">{panelStatus}</span> : null}
                         </div>
@@ -1428,7 +1453,6 @@ function App() {
                     </label>
                     <div className="employee-form-actions">
                       <button type="submit" className="btn-add">{editingEmployeeManagementId ? 'Save changes' : 'Add employee'}</button>
-                      <button type="button" className="btn-secondary" onClick={saveEmployeesToJson}>Save JSON</button>
                     </div>
                   </form>
                 </section>

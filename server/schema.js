@@ -1,0 +1,648 @@
+import { all, get, getAppSetting, getJsonSetting, run, setJsonSetting } from './db.js'
+
+export const typeDefs = `#graphql
+  type Vendor {
+    id: ID!
+    company: String!
+    vatNumber: String
+    quotationTo: String
+    shippingAddress: String
+  }
+
+  type LabourPrice {
+    id: ID!
+    title: String!
+    normalHourlyRate: Float!
+    normalDaily7: Float!
+    normalDaily11: Float!
+    onsiteHourlyRate: Float!
+    onsiteDaily7: Float!
+    onsiteDaily11: Float!
+    breakdownHourlyRate: Float!
+    breakdownDaily7: Float!
+    breakdownDaily11: Float!
+    normalHours: Float!
+    mineHours: Float!
+  }
+
+  type MaterialItem {
+    id: ID!
+    category: String!
+    name: String!
+    price: Float!
+    note: String
+  }
+
+  type TimeEntry {
+    id: ID!
+    title: String!
+    date: String!
+    hours: String!
+    status: String!
+  }
+
+  type TimeLogEntry {
+    id: ID!
+    action: String!
+    group: String
+    section: String
+    timestamp: String!
+    details: String!
+  }
+
+  type QuotationHistoryItem {
+    id: ID!
+    quotationNumber: String
+    dateCreated: String
+    timeCreated: String
+    quotationTo: String
+    shippingAddress: String
+    totalPrice: String
+    savedAt: String
+    fileName: String
+    pdfPreviewUrl: String
+  }
+
+  type BootstrapData {
+    activePage: String!
+    quotationCounter: Int!
+    panelDescription: String!
+    quotationHistory: [QuotationHistoryItem!]!
+    vendors: [Vendor!]!
+    labourPrices: [LabourPrice!]!
+    materialItems: [MaterialItem!]!
+    employees: [Employee!]!
+    employeeHours: [EmployeeHour!]!
+    currentProjectHours: [ProjectHour!]!
+    plannedProjectHours: [ProjectHour!]!
+    timeEntries: [TimeEntry!]!
+    timeLogEntries: [TimeLogEntry!]!
+  }
+
+  type Employee {
+    id: ID!
+    name: String!
+    role: String
+    coyNumber: String
+    department: String
+    email: String
+    phone: String
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type EmployeeHour {
+    id: ID!
+    name: String!
+    date: String!
+    timeIn: String!
+    timeOut: String!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type ProjectHour {
+    id: ID!
+    name: String!
+    hours: Float!
+    project: String!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type Query {
+    bootstrap: BootstrapData!
+    vendors: [Vendor!]!
+    labourPrices: [LabourPrice!]!
+    materialItems(category: String): [MaterialItem!]!
+    timeEntries: [TimeEntry!]!
+    quotationHistory: [QuotationHistoryItem!]!
+    panelDescription: String!
+    activePage: String!
+    quotationCounter: Int!
+    timeLogEntries: [TimeLogEntry!]!
+    employees: [Employee!]!
+    employeeHours: [EmployeeHour!]!
+    currentProjectHours: [ProjectHour!]!
+    plannedProjectHours: [ProjectHour!]!
+  }
+
+  input EmployeeInput {
+    name: String!
+    role: String
+    coyNumber: String
+    department: String
+    email: String
+    phone: String
+  }
+
+  input EmployeeHourInput {
+    employeeName: String!
+    date: String!
+    timeIn: String!
+    timeOut: String!
+  }
+
+  input ProjectHourInput {
+    employeeName: String!
+    hours: Float!
+    project: String!
+  }
+
+  input LabourPriceInput {
+    id: ID
+    title: String!
+    normalHourlyRate: Float!
+    normalDaily7: Float!
+    normalDaily11: Float!
+    onsiteHourlyRate: Float!
+    onsiteDaily7: Float!
+    onsiteDaily11: Float!
+    breakdownHourlyRate: Float!
+    breakdownDaily7: Float!
+    breakdownDaily11: Float!
+    normalHours: Float!
+    mineHours: Float!
+  }
+
+  input MaterialItemInput {
+    id: ID
+    category: String!
+    name: String!
+    price: Float!
+    note: String
+  }
+
+  input TimeEntryInput {
+    id: ID!
+    title: String!
+    date: String!
+    hours: String!
+    status: String!
+  }
+
+  input TimeLogEntryInput {
+    id: ID!
+    action: String!
+    group: String
+    section: String
+    timestamp: String!
+    details: String!
+  }
+
+  input QuotationHistoryInput {
+    id: ID!
+    quotationNumber: String
+    dateCreated: String
+    timeCreated: String
+    quotationTo: String
+    shippingAddress: String
+    totalPrice: String
+    savedAt: String
+    fileName: String
+    pdfPreviewUrl: String
+  }
+
+  input LegacyDataInput {
+    employeeManagementData: String
+    timeManagementData: String
+    labourPricesData: String
+    quotationHistory: String
+    quotationPanelData: String
+    activePage: String
+    quoCounter: String
+  }
+
+  type Mutation {
+    migrateLegacyData(input: LegacyDataInput): BootstrapData!
+    setActivePage(page: String!): String!
+    setQuotationCounter(counter: Int!): Int!
+    setPanelDescription(description: String!): String!
+    saveQuotationHistory(items: [QuotationHistoryInput!]!): [QuotationHistoryItem!]!
+    saveTimeEntries(items: [TimeEntryInput!]!): [TimeEntry!]!
+    saveLabourPrices(items: [LabourPriceInput!]!): [LabourPrice!]!
+    saveMaterialItems(category: String!, items: [MaterialItemInput!]!): [MaterialItem!]!
+    addTimeLogEntry(input: TimeLogEntryInput!): TimeLogEntry!
+
+    addEmployee(input: EmployeeInput!): Employee!
+    updateEmployee(id: ID!, input: EmployeeInput!): Employee!
+    deleteEmployee(id: ID!): Boolean!
+
+    addEmployeeHour(input: EmployeeHourInput!): EmployeeHour!
+    updateEmployeeHour(id: ID!, input: EmployeeHourInput!): EmployeeHour!
+    deleteEmployeeHour(id: ID!): Boolean!
+
+    addCurrentProjectHour(input: ProjectHourInput!): ProjectHour!
+    updateCurrentProjectHour(id: ID!, input: ProjectHourInput!): ProjectHour!
+    deleteCurrentProjectHour(id: ID!): Boolean!
+
+    addPlannedProjectHour(input: ProjectHourInput!): ProjectHour!
+    updatePlannedProjectHour(id: ID!, input: ProjectHourInput!): ProjectHour!
+    deletePlannedProjectHour(id: ID!): Boolean!
+  }
+`
+
+const toId = (id) => Number.parseInt(id, 10)
+const parseJson = (value, fallback) => {
+  if (!value) return fallback
+
+  try {
+    return JSON.parse(value)
+  } catch (error) {
+    return fallback
+  }
+}
+
+const loadBootstrap = async () => {
+  const activePage = await getAppSetting('activePage', 'builder')
+  const quotationCounterRaw = await getAppSetting('quotationCounter', '0')
+  const panelDescription = await getAppSetting('panelDescription', '')
+  const quotationHistory = await getJsonSetting('quotationHistory', [])
+  const timeEntries = await getJsonSetting('timeEntries', [])
+  const timeLogEntries = await all(
+    `SELECT id, action, groupName AS "group", section, timestamp, details FROM time_log_entries ORDER BY timestamp DESC LIMIT 200`
+  )
+
+  return {
+    activePage,
+    quotationCounter: Number.parseInt(quotationCounterRaw || '0', 10) || 0,
+    panelDescription,
+    quotationHistory,
+    vendors: await all('SELECT * FROM vendors ORDER BY company ASC'),
+    labourPrices: await all('SELECT * FROM labour_prices ORDER BY id ASC'),
+    materialItems: await all('SELECT * FROM material_items ORDER BY category ASC, id ASC'),
+    employees: await all('SELECT * FROM employees ORDER BY id DESC'),
+    employeeHours: await all(`SELECT id, employeeName AS name, date, timeIn, timeOut, createdAt, updatedAt FROM employee_hours ORDER BY id DESC`),
+    currentProjectHours: await all(`SELECT id, employeeName AS name, hours, project, createdAt, updatedAt FROM current_project_hours ORDER BY id DESC`),
+    plannedProjectHours: await all(`SELECT id, employeeName AS name, hours, project, createdAt, updatedAt FROM planned_project_hours ORDER BY id DESC`),
+    timeEntries,
+    timeLogEntries
+  }
+}
+
+const replaceLabourPrices = async (items) => {
+  await run('DELETE FROM labour_prices')
+
+  for (const row of items) {
+    await run(
+      `
+        INSERT INTO labour_prices (
+          title, normalHourlyRate, normalDaily7, normalDaily11,
+          onsiteHourlyRate, onsiteDaily7, onsiteDaily11,
+          breakdownHourlyRate, breakdownDaily7, breakdownDaily11,
+          normalHours, mineHours
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        row.title || '', row.normalHourlyRate || 0, row.normalDaily7 || 0, row.normalDaily11 || 0,
+        row.onsiteHourlyRate || 0, row.onsiteDaily7 || 0, row.onsiteDaily11 || 0,
+        row.breakdownHourlyRate || 0, row.breakdownDaily7 || 0, row.breakdownDaily11 || 0,
+        row.normalHours || 7.5, row.mineHours || 11.5
+      ]
+    )
+  }
+
+  return all('SELECT * FROM labour_prices ORDER BY id ASC')
+}
+
+const replaceMaterialItems = async (category, items) => {
+  await run('DELETE FROM material_items WHERE category = ?', [category])
+
+  for (const row of items) {
+    await run(
+      `INSERT INTO material_items (category, name, price, note, updatedAt) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [category, row.name || '', row.price || 0, row.note || '']
+    )
+  }
+
+  return all('SELECT * FROM material_items WHERE category = ? ORDER BY id ASC', [category])
+}
+
+const migrateLegacyData = async (input = {}) => {
+  const legacyEmployees = parseJson(input.employeeManagementData, null)
+  if (Array.isArray(legacyEmployees) && legacyEmployees.length > 0) {
+    await run('DELETE FROM employees')
+    for (const employee of legacyEmployees) {
+      await run(
+        `INSERT INTO employees (name, role, coyNumber, department, email, phone) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          employee.name || '',
+          employee.role || employee.title || '',
+          employee.coyNumber || '',
+          employee.department || '',
+          employee.email || '',
+          employee.phone || ''
+        ]
+      )
+    }
+  }
+
+  const legacyTimeData = parseJson(input.timeManagementData, null)
+  if (legacyTimeData) {
+    await run('DELETE FROM employee_hours')
+    await run('DELETE FROM current_project_hours')
+    await run('DELETE FROM planned_project_hours')
+    await run('DELETE FROM time_log_entries')
+
+    for (const row of legacyTimeData.employeeHours || []) {
+      await run(
+        `INSERT INTO employee_hours (employeeName, date, timeIn, timeOut) VALUES (?, ?, ?, ?)`,
+        [row.name || '', row.date || '', row.timeIn || '', row.timeOut || '']
+      )
+    }
+
+    for (const row of legacyTimeData.currentProjectHours || []) {
+      await run(
+        `INSERT INTO current_project_hours (employeeName, hours, project) VALUES (?, ?, ?)`,
+        [row.name || '', Number.parseFloat(row.hours) || 0, row.project || '']
+      )
+    }
+
+    for (const row of legacyTimeData.plannedProjectHours || []) {
+      await run(
+        `INSERT INTO planned_project_hours (employeeName, hours, project) VALUES (?, ?, ?)`,
+        [row.name || '', Number.parseFloat(row.hours) || 0, row.project || '']
+      )
+    }
+
+    for (const row of legacyTimeData.activityLog || []) {
+      await run(
+        `INSERT INTO time_log_entries (id, action, groupName, section, timestamp, details) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          row.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          row.action || '',
+          row.group || row.action || '',
+          row.section || '',
+          row.timestamp || new Date().toISOString(),
+          JSON.stringify(row)
+        ]
+      )
+    }
+  }
+
+  const labourPayload = parseJson(input.labourPricesData, null)
+  if (Array.isArray(labourPayload?.labourPrices) && labourPayload.labourPrices.length > 0) {
+    await replaceLabourPrices(labourPayload.labourPrices)
+  }
+
+  const historyPayload = parseJson(input.quotationHistory, null)
+  if (Array.isArray(historyPayload)) {
+    await setJsonSetting('quotationHistory', historyPayload)
+  }
+
+  const panelPayload = parseJson(input.quotationPanelData, null)
+  if (panelPayload && typeof panelPayload.description === 'string') {
+    await run(
+      `
+        INSERT INTO app_settings (key, value, updatedAt)
+        VALUES ('panelDescription', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = CURRENT_TIMESTAMP
+      `,
+      [panelPayload.description]
+    )
+  }
+
+  if (input.activePage) {
+    await run(
+      `
+        INSERT INTO app_settings (key, value, updatedAt)
+        VALUES ('activePage', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = CURRENT_TIMESTAMP
+      `,
+      [input.activePage]
+    )
+  }
+
+  const parsedCounter = Number.parseInt(input.quoCounter || '', 10)
+  if (!Number.isNaN(parsedCounter)) {
+    await run(
+      `
+        INSERT INTO app_settings (key, value, updatedAt)
+        VALUES ('quotationCounter', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = CURRENT_TIMESTAMP
+      `,
+      [String(parsedCounter)]
+    )
+  }
+}
+
+export const resolvers = {
+  Query: {
+    bootstrap: async () => loadBootstrap(),
+    vendors: async () => all('SELECT * FROM vendors ORDER BY company ASC'),
+    labourPrices: async () => all('SELECT * FROM labour_prices ORDER BY id ASC'),
+    materialItems: async (_, { category }) => {
+      if (category) {
+        return all('SELECT * FROM material_items WHERE category = ? ORDER BY id ASC', [category])
+      }
+
+      return all('SELECT * FROM material_items ORDER BY category ASC, id ASC')
+    },
+    timeEntries: async () => getJsonSetting('timeEntries', []),
+    quotationHistory: async () => getJsonSetting('quotationHistory', []),
+    panelDescription: async () => getAppSetting('panelDescription', ''),
+    activePage: async () => getAppSetting('activePage', 'builder'),
+    quotationCounter: async () => {
+      const value = await getAppSetting('quotationCounter', '0')
+      return Number.parseInt(value || '0', 10) || 0
+    },
+    timeLogEntries: async () => all(
+      `SELECT id, action, groupName AS "group", section, timestamp, details FROM time_log_entries ORDER BY timestamp DESC LIMIT 200`
+    ),
+    employees: async () => all('SELECT * FROM employees ORDER BY id DESC'),
+    employeeHours: async () => all('SELECT id, employeeName AS name, date, timeIn, timeOut, createdAt, updatedAt FROM employee_hours ORDER BY id DESC'),
+    currentProjectHours: async () => all('SELECT id, employeeName AS name, hours, project, createdAt, updatedAt FROM current_project_hours ORDER BY id DESC'),
+    plannedProjectHours: async () => all('SELECT id, employeeName AS name, hours, project, createdAt, updatedAt FROM planned_project_hours ORDER BY id DESC')
+  },
+  Mutation: {
+    migrateLegacyData: async (_, { input }) => {
+      await migrateLegacyData(input || {})
+      return loadBootstrap()
+    },
+
+    setActivePage: async (_, { page }) => {
+      await run(
+        `
+          INSERT INTO app_settings (key, value, updatedAt)
+          VALUES ('activePage', ?, CURRENT_TIMESTAMP)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = CURRENT_TIMESTAMP
+        `,
+        [page]
+      )
+
+      return page
+    },
+
+    setQuotationCounter: async (_, { counter }) => {
+      await run(
+        `
+          INSERT INTO app_settings (key, value, updatedAt)
+          VALUES ('quotationCounter', ?, CURRENT_TIMESTAMP)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = CURRENT_TIMESTAMP
+        `,
+        [String(counter)]
+      )
+
+      return counter
+    },
+
+    setPanelDescription: async (_, { description }) => {
+      await run(
+        `
+          INSERT INTO app_settings (key, value, updatedAt)
+          VALUES ('panelDescription', ?, CURRENT_TIMESTAMP)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = CURRENT_TIMESTAMP
+        `,
+        [description]
+      )
+
+      return description
+    },
+
+    saveQuotationHistory: async (_, { items }) => {
+      await setJsonSetting('quotationHistory', items || [])
+      return getJsonSetting('quotationHistory', [])
+    },
+
+    saveTimeEntries: async (_, { items }) => {
+      await setJsonSetting('timeEntries', items || [])
+      return getJsonSetting('timeEntries', [])
+    },
+
+    saveLabourPrices: async (_, { items }) => replaceLabourPrices(items || []),
+
+    saveMaterialItems: async (_, { category, items }) => replaceMaterialItems(category, items || []),
+
+    addTimeLogEntry: async (_, { input }) => {
+      await run(
+        `INSERT INTO time_log_entries (id, action, groupName, section, timestamp, details) VALUES (?, ?, ?, ?, ?, ?)`,
+        [input.id, input.action, input.group || '', input.section || '', input.timestamp, input.details || '{}']
+      )
+
+      return {
+        id: input.id,
+        action: input.action,
+        group: input.group || '',
+        section: input.section || '',
+        timestamp: input.timestamp,
+        details: input.details || '{}'
+      }
+    },
+
+    addEmployee: async (_, { input }) => {
+      const result = await run(
+        `INSERT INTO employees (name, role, coyNumber, department, email, phone) VALUES (?, ?, ?, ?, ?, ?)`,
+        [input.name, input.role || '', input.coyNumber || '', input.department || '', input.email || '', input.phone || '']
+      )
+
+      return get('SELECT * FROM employees WHERE id = ?', [result.lastID])
+    },
+
+    updateEmployee: async (_, { id, input }) => {
+      const parsedId = toId(id)
+      await run(
+        `
+          UPDATE employees
+          SET name = ?, role = ?, coyNumber = ?, department = ?, email = ?, phone = ?, updatedAt = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [input.name, input.role || '', input.coyNumber || '', input.department || '', input.email || '', input.phone || '', parsedId]
+      )
+
+      return get('SELECT * FROM employees WHERE id = ?', [parsedId])
+    },
+
+    deleteEmployee: async (_, { id }) => {
+      const parsedId = toId(id)
+      const result = await run('DELETE FROM employees WHERE id = ?', [parsedId])
+      return result.changes > 0
+    },
+
+    addEmployeeHour: async (_, { input }) => {
+      const result = await run(
+        `INSERT INTO employee_hours (employeeName, date, timeIn, timeOut) VALUES (?, ?, ?, ?)`,
+        [input.employeeName, input.date, input.timeIn, input.timeOut]
+      )
+
+      return get('SELECT id, employeeName AS name, date, timeIn, timeOut, createdAt, updatedAt FROM employee_hours WHERE id = ?', [result.lastID])
+    },
+
+    updateEmployeeHour: async (_, { id, input }) => {
+      const parsedId = toId(id)
+      await run(
+        `
+          UPDATE employee_hours
+          SET employeeName = ?, date = ?, timeIn = ?, timeOut = ?, updatedAt = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [input.employeeName, input.date, input.timeIn, input.timeOut, parsedId]
+      )
+
+      return get('SELECT id, employeeName AS name, date, timeIn, timeOut, createdAt, updatedAt FROM employee_hours WHERE id = ?', [parsedId])
+    },
+
+    deleteEmployeeHour: async (_, { id }) => {
+      const parsedId = toId(id)
+      const result = await run('DELETE FROM employee_hours WHERE id = ?', [parsedId])
+      return result.changes > 0
+    },
+
+    addCurrentProjectHour: async (_, { input }) => {
+      const result = await run(
+        `INSERT INTO current_project_hours (employeeName, hours, project) VALUES (?, ?, ?)`,
+        [input.employeeName, input.hours, input.project]
+      )
+
+      return get('SELECT id, employeeName AS name, hours, project, createdAt, updatedAt FROM current_project_hours WHERE id = ?', [result.lastID])
+    },
+
+    updateCurrentProjectHour: async (_, { id, input }) => {
+      const parsedId = toId(id)
+      await run(
+        `
+          UPDATE current_project_hours
+          SET employeeName = ?, hours = ?, project = ?, updatedAt = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [input.employeeName, input.hours, input.project, parsedId]
+      )
+
+      return get('SELECT id, employeeName AS name, hours, project, createdAt, updatedAt FROM current_project_hours WHERE id = ?', [parsedId])
+    },
+
+    deleteCurrentProjectHour: async (_, { id }) => {
+      const parsedId = toId(id)
+      const result = await run('DELETE FROM current_project_hours WHERE id = ?', [parsedId])
+      return result.changes > 0
+    },
+
+    addPlannedProjectHour: async (_, { input }) => {
+      const result = await run(
+        `INSERT INTO planned_project_hours (employeeName, hours, project) VALUES (?, ?, ?)`,
+        [input.employeeName, input.hours, input.project]
+      )
+
+      return get('SELECT id, employeeName AS name, hours, project, createdAt, updatedAt FROM planned_project_hours WHERE id = ?', [result.lastID])
+    },
+
+    updatePlannedProjectHour: async (_, { id, input }) => {
+      const parsedId = toId(id)
+      await run(
+        `
+          UPDATE planned_project_hours
+          SET employeeName = ?, hours = ?, project = ?, updatedAt = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [input.employeeName, input.hours, input.project, parsedId]
+      )
+
+      return get('SELECT id, employeeName AS name, hours, project, createdAt, updatedAt FROM planned_project_hours WHERE id = ?', [parsedId])
+    },
+
+    deletePlannedProjectHour: async (_, { id }) => {
+      const parsedId = toId(id)
+      const result = await run('DELETE FROM planned_project_hours WHERE id = ?', [parsedId])
+      return result.changes > 0
+    }
+  }
+}
