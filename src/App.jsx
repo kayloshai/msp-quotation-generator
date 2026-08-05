@@ -988,22 +988,22 @@ function App() {
             <span className="nav-icon">✎</span>
             Create Quote
           </button>
-          <button
+          {/* <button
             type="button"
             className={`nav-item ${activePage === 'history' ? 'active' : ''}`}
             onClick={() => setActivePage('history')}
           >
             <span className="nav-icon">🕘</span>
             History
-          </button>
-          <button
+          </button> */}
+          {/* <button
             type="button"
             className={`nav-item ${activePage === 'preview' ? 'active' : ''}`}
             onClick={() => setActivePage('preview')}
           >
             <span className="nav-icon">🖨️</span>
             Preview
-          </button>
+          </button> */}
           <button
             type="button"
             className={`nav-item ${activePage === 'time-management' ? 'active' : ''}`}
@@ -1048,12 +1048,12 @@ function App() {
             <h1>{activePage === 'builder' ? 'Quote builder' : activePage === 'history' ? 'Quotation history' : activePage === 'time-management' ? 'Time management' : activePage === 'employee-management' ? 'Employee management' : activePage === 'price-calculator' ? 'Price calculator' : 'PDF preview'}</h1>
           </div>
           <div className="header-actions">
-            <button type="button" className="btn-secondary" onClick={() => setActivePage('history')}>
+            {/* <button type="button" className="btn-secondary" onClick={() => setActivePage('history')}>
               View history
-            </button>
-            <button type="button" className="btn-secondary" onClick={() => setActivePage('preview')}>
+            </button> */}
+            {/* <button type="button" className="btn-secondary" onClick={() => setActivePage('preview')}>
               Preview output
-            </button>
+            </button> */}
             {(activePage === 'builder' || activePage === 'preview') && (
               <button className="btn-generate" onClick={handleHeaderExport}>
                 Download PDF
