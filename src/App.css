@@ -4,6 +4,7 @@
 
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   background: linear-gradient(135deg, var(--app-bg-start) 0%, var(--app-bg-end) 100%);
@@ -104,7 +105,7 @@
 }
 
 .app-main {
-  padding: 2rem;
+  padding: clamp(1rem, 1.8vw, 2rem);
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -114,6 +115,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
   padding: 1.15rem 1.25rem;
   background: var(--color-white);
@@ -138,6 +140,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
+}
+
+.header-actions > * {
+  flex-shrink: 0;
 }
 
 .btn-secondary {
@@ -345,6 +351,7 @@
 
 .time-grid-table {
   width: 100%;
+  min-width: 700px;
   border-collapse: collapse;
   background: var(--color-white);
   border: 1px solid var(--color-border-tint);
@@ -580,6 +587,7 @@
 }
 
 .line-items-table {
+  width: 100%;
   border: 1px solid var(--color-border);
   border-radius: 4px;
   overflow: hidden;
@@ -870,6 +878,7 @@
 
 .employee-roster-table {
   width: 100%;
+  min-width: 760px;
   border-collapse: collapse;
   background: var(--color-white);
   border: 1px solid var(--color-border-tint);
@@ -908,12 +917,20 @@
 .employee-list-actions {
   display: flex;
   gap: 0.45rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+}
+
+.employee-actions-cell {
+  width: 104px;
+  min-width: 104px;
+  white-space: nowrap;
 }
 
 .employee-action-btn {
   width: 32px;
   height: 32px;
+  min-height: 32px;
   border: 1px solid var(--color-border-tint);
   border-radius: 8px;
   display: inline-flex;
@@ -1011,16 +1028,18 @@
   background: var(--overlay-bg);
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
+  padding: calc(env(safe-area-inset-top, 0px) + 0.75rem) 0.75rem calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
   z-index: 1000;
 }
 
 .modal-content {
-  width: min(560px, 90vw);
+  width: min(560px, 100%);
   background: var(--color-white);
   border-radius: 10px;
   box-shadow: 0 20px 45px var(--overlay-shadow);
   overflow: hidden;
+  max-height: calc(100svh - 1.5rem);
 }
 
 .modal-header {
@@ -1035,6 +1054,7 @@
   border: none;
   background: none;
   font-size: 1.5rem;
+  min-height: 0;
   line-height: 1;
   cursor: pointer;
   color: var(--color-text);
@@ -1045,11 +1065,13 @@
   top: 12px;
   right: 14px;
   font-size: 1.8rem;
+  min-height: 0;
   padding: 0.25rem 0.5rem;
 }
 
 .modal-body {
   padding: 0;
+  overflow: auto;
 }
 
 .pdf-preview-frame {
@@ -1070,7 +1092,7 @@
 
 .pdf-preview-iframe {
   width: 100%;
-  height: 90vh;
+  height: min(78svh, 720px);
   border: none;
   background: var(--color-white);
 }
@@ -1661,8 +1683,8 @@
 
 /* Material Management Styles */
 .material-management-grid {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1.2rem;
   margin-top: 1.5rem;
   padding: 1.5rem;
@@ -1805,6 +1827,34 @@
 }
 
 @media (max-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    scrollbar-width: thin;
+  }
+
+  .nav-item {
+    white-space: nowrap;
+  }
+
+  .builder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .time-overview-grid,
   .time-section-grid {
     grid-template-columns: 1fr;
@@ -1827,7 +1877,7 @@
   }
 
   .material-management-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .employee-form-grid {
@@ -1836,6 +1886,36 @@
 }
 
 @media (max-width: 768px) {
+  .app-main {
+    padding: 0.85rem;
+  }
+
+  .app-header,
+  .page-card,
+  .form-section,
+  .price-editor-card,
+  .price-summary-card {
+    border-radius: 12px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .btn-generate,
+  .header-actions .btn-secondary {
+    flex: 1 1 180px;
+  }
+
+  .sidebar-brand p:last-child,
+  .sidebar-card {
+    display: none;
+  }
+
+  .employee-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
   .price-card-grid {
     grid-template-columns: 1fr;
   }
@@ -1856,6 +1936,78 @@
 
   .material-management-grid {
     grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+
+  .time-form {
+    grid-template-columns: 1fr;
+  }
+
+  .time-form .btn-add {
+    grid-column: auto;
+  }
+
+  .button-group {
+    width: 100%;
+    justify-content: stretch;
+    flex-wrap: wrap;
+  }
+
+  .button-group .btn-generate,
+  .button-group .btn-add,
+  .button-group .btn-secondary {
+    flex: 1 1 100%;
+  }
+
+  .line-items-table {
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+    background: transparent;
+  }
+
+  .table-header {
+    display: none;
+  }
+
+  .table-row {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+    padding: 0.9rem;
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    margin-bottom: 0.8rem;
+    background: var(--color-white);
+  }
+
+  .table-row > div {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+  }
+
+  .table-row > div::before {
+    content: attr(data-label);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-text-muted-green);
+  }
+
+  .col-total,
+  .col-action {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .col-action .btn-delete {
+    width: 100%;
+  }
+
+  .pdf-preview-iframe {
+    height: 65svh;
   }
 
   .time-grid-table th,
@@ -1877,6 +2029,11 @@
   .employee-roster-table th,
   .employee-roster-table td {
     white-space: nowrap;
+  }
+
+  .employee-actions-cell {
+    width: 92px;
+    min-width: 92px;
   }
 }
 

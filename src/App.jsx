@@ -761,11 +761,11 @@ function App() {
     setPanelStatus('Panel description saved to the database.')
   }
 
-  const pickSaveLocation = async () => {
-    const fixedPath = 'C:/Users/Welcome/Documents/Quotations'
-    setSaveLocationHandle(null)
-    setSaveLocationLabel(fixedPath)
-  }
+  // const pickSaveLocation = async () => {
+  //   const fixedPath = 'C:/Users/Welcome/Documents/Quotations'
+  //   setSaveLocationHandle(null)
+  //   setSaveLocationLabel(fixedPath)
+  // }
 
   const saveQuotationHistory = (quoteData) => {
     const nextHistory = [quoteData, ...quotationHistory].slice(0, 20)
@@ -1202,7 +1202,7 @@ function App() {
 
                       {lineItems.map((item) => (
                         <div key={item.id} className="table-row">
-                          <div className="col-qty">
+                          <div className="col-qty" data-label="Qty">
                             <input
                               type="number"
                               min="0"
@@ -1211,7 +1211,7 @@ function App() {
                               placeholder="0"
                             />
                           </div>
-                          <div className="col-item">
+                          <div className="col-item" data-label="Item">
                             <select
                               value={item.item}
                               onChange={(e) => handleLineItemChange(item.id, 'item', e.target.value)}
@@ -1221,7 +1221,7 @@ function App() {
                               ))}
                             </select>
                           </div>
-                          <div className="col-description">
+                          <div className="col-description" data-label="Description">
                             <textarea
                               value={item.description}
                               onChange={(e) => {
@@ -1233,7 +1233,7 @@ function App() {
                               rows="2"
                             />
                           </div>
-                          <div className="col-price">
+                          <div className="col-price" data-label="Unit Price">
                             <input
                               type="number"
                               min="0"
@@ -1243,10 +1243,10 @@ function App() {
                               placeholder="0.00"
                             />
                           </div>
-                          <div className="col-total">
+                          <div className="col-total" data-label="Line Total">
                             {calculateLineTotal(item.qty, item.unitPrice)}
                           </div>
-                          <div className="col-action">
+                          <div className="col-action" data-label="Action">
                             <button
                               className="btn-delete"
                               onClick={() => removeLineItem(item.id)}
@@ -1271,12 +1271,12 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="form-group">
+                  {/* <div className="form-group">
                     <label>PDF save location</label>
                     <div className="save-location-row">
                       <span className="save-location-label">{saveLocationLabel}</span>
                     </div>
-                  </div>
+                  </div> */}
                 </div>
               </div>
 
@@ -1495,7 +1495,7 @@ function App() {
                               <td>{employee.coyNumber || 'Not set'}</td>
                               <td>{employee.email || 'No email'}</td>
                               <td>{employee.phone || 'No phone'}</td>
-                              <td>
+                              <td className="employee-actions-cell">
                                 <div className="employee-list-actions">
                                   <button
                                     type="button"

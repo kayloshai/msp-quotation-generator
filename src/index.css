@@ -27,6 +27,16 @@ input, select, textarea, button {
   font-family: inherit;
 }
 
+input,
+select,
+textarea {
+  min-height: 44px;
+}
+
+button {
+  min-height: 44px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   a:where(:not(.no-animation)):nth-child(2n) {
     animation: link-animation 2s infinite power-in power-out alternate;
