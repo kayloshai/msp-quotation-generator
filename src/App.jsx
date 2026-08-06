@@ -11,7 +11,8 @@ const employeeTrainingOptions = [
   'Working at heights level 2',
   'Basic fire fighting'
 ]
-const graphqlEndpoint = import.meta.env.VITE_GRAPHQL_URL || 'http://localhost:4000/'
+const runtimeHost = typeof window === 'undefined' ? 'localhost' : window.location.hostname
+const graphqlEndpoint = import.meta.env.VITE_GRAPHQL_URL || `http://${runtimeHost}:4000/`
 
 const graphqlRequest = async (query, variables = {}) => {
   const response = await fetch(graphqlEndpoint, {
@@ -94,6 +95,30 @@ const getEmployeeComplianceRows = (employee) => {
   return rows
 }
 
+const normalizeMatchLabel = (value) => {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const findLabourRateByRole = (role, labourRows) => {
+  const normalizedRole = normalizeMatchLabel(role)
+  if (!normalizedRole) return null
+
+  const rows = Array.isArray(labourRows) ? labourRows : []
+
+  const exactMatch = rows.find((labour) => normalizeMatchLabel(labour?.title) === normalizedRole)
+  if (exactMatch) return exactMatch
+
+  return rows.find((labour) => {
+    const normalizedTitle = normalizeMatchLabel(labour?.title)
+    return normalizedTitle.includes(normalizedRole) || normalizedRole.includes(normalizedTitle)
+  }) || null
+}
+
 const normalizePageKey = (page) => {
   if (page === 'time') {
     return 'time-management'
@@ -151,6 +176,12 @@ function App() {
   const [plannedProjectForm, setPlannedProjectForm] = useState({ name: '', hours: '', project: '' })
   const [currentProjectFormOpen, setCurrentProjectFormOpen] = useState(true)
   const [plannedProjectFormOpen, setPlannedProjectFormOpen] = useState(true)
+  const [currentProjectEmployeeMode, setCurrentProjectEmployeeMode] = useState('single')
+  const [plannedProjectEmployeeMode, setPlannedProjectEmployeeMode] = useState('single')
+  const [currentProjectBulkEmployees, setCurrentProjectBulkEmployees] = useState([])
+  const [plannedProjectBulkEmployees, setPlannedProjectBulkEmployees] = useState([])
+  const [currentProjectBulkOpen, setCurrentProjectBulkOpen] = useState(false)
+  const [plannedProjectBulkOpen, setPlannedProjectBulkOpen] = useState(false)
   const [employeeManagementForm, setEmployeeManagementForm] = useState({ name: '', role: '', coyNumber: '', department: '', email: '', phone: '', inductionExpiryDate: '' })
   const [employeeTrainingMode, setEmployeeTrainingMode] = useState('single')
   const [employeeTrainingSingle, setEmployeeTrainingSingle] = useState({ training: '', expiryDate: '' })
@@ -299,6 +330,23 @@ function App() {
     return Number(left?.id || 0) - Number(right?.id || 0)
   })
 
+  const trainingListOptions = Array.from(
+    new Map(
+      [
+        ...employeeTrainingOptions,
+        ...employeeOptions.flatMap((employee) => (
+          Array.isArray(employee?.trainingRecords)
+            ? employee.trainingRecords.map((record) => String(record?.training || '').trim())
+            : []
+        )),
+        ...employeeTrainingRecords.map((record) => String(record?.training || '').trim())
+      ]
+        .map((training) => String(training || '').trim())
+        .filter(Boolean)
+        .map((training) => [training.toLowerCase(), training])
+    ).values()
+  ).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true }))
+
   const latestUpdatedEmployee = employeeOptions.reduce((latestEmployee, currentEmployee) => {
     if (!latestEmployee) {
       return currentEmployee
@@ -313,6 +361,25 @@ function App() {
 
     return latestEmployee
   }, null)
+
+  const upcomingActivities = [
+    ...currentProjectHours.map((entry) => ({
+      id: `current-${entry.id}`,
+      activity: entry.project || 'Current project activity',
+      date: entry.date || '-',
+      hours: parseFloat(entry.hours) || 0,
+      status: 'In progress'
+    })),
+    ...plannedProjectHours.map((entry) => ({
+      id: `planned-${entry.id}`,
+      activity: entry.project || 'Planned project activity',
+      date: entry.date || '-',
+      hours: parseFloat(entry.hours) || 0,
+      status: 'Planned'
+    }))
+  ]
+
+  const estimatedWeeklyHours = upcomingActivities.reduce((sum, entry) => sum + (entry.hours || 0), 0)
 
   const hydrateFromBootstrap = (bootstrap) => {
     const incomingVendors = bootstrap.vendors || []
@@ -681,27 +748,46 @@ function App() {
   }
 
   const addCurrentProjectHour = async () => {
-    if (!currentProjectForm.name || !currentProjectForm.hours || !currentProjectForm.project) return
+    const parsedHours = parseFloat(currentProjectForm.hours)
+    const isValidHours = !Number.isNaN(parsedHours) && parsedHours > 0
 
-    const data = await graphqlRequest(
-      `
-        mutation AddCurrentProjectHour($input: ProjectHourInput!) {
-          addCurrentProjectHour(input: $input) { id name hours project createdAt updatedAt }
-        }
-      `,
-      {
-        input: {
-          employeeName: currentProjectForm.name,
-          hours: parseFloat(currentProjectForm.hours),
-          project: currentProjectForm.project
-        }
-      }
-    )
+    if (!isValidHours || !currentProjectForm.project) return
 
-    const newEntry = data.addCurrentProjectHour
-    setCurrentProjectHours((prev) => [newEntry, ...prev])
+    const addCurrentEntry = async (employeeName) => {
+      const data = await graphqlRequest(
+        `
+          mutation AddCurrentProjectHour($input: ProjectHourInput!) {
+            addCurrentProjectHour(input: $input) { id name hours project createdAt updatedAt }
+          }
+        `,
+        {
+          input: {
+            employeeName,
+            hours: parsedHours,
+            project: currentProjectForm.project
+          }
+        }
+      )
+
+      return data.addCurrentProjectHour
+    }
+
+    const employeeNames = currentProjectEmployeeMode === 'bulk'
+      ? currentProjectBulkEmployees
+      : [currentProjectForm.name]
+
+    if (!employeeNames.length || employeeNames.some((name) => !name)) return
+
+    const newEntries = await Promise.all(employeeNames.map((employeeName) => addCurrentEntry(employeeName)))
+
+    setCurrentProjectHours((prev) => [...newEntries, ...prev])
     setCurrentProjectForm({ name: '', hours: '', project: '' })
-    void appendTimeLogEntry('add', 'current-project-hours', { entry: newEntry })
+    setCurrentProjectBulkEmployees([])
+    setCurrentProjectBulkOpen(false)
+
+    newEntries.forEach((entry) => {
+      void appendTimeLogEntry('add', 'current-project-hours', { entry })
+    })
   }
 
   const updateCurrentProjectHour = async (id, field, value) => {
@@ -750,27 +836,46 @@ function App() {
   }
 
   const addPlannedProjectHour = async () => {
-    if (!plannedProjectForm.name || !plannedProjectForm.hours || !plannedProjectForm.project) return
+    const parsedHours = parseFloat(plannedProjectForm.hours)
+    const isValidHours = !Number.isNaN(parsedHours) && parsedHours > 0
 
-    const data = await graphqlRequest(
-      `
-        mutation AddPlannedProjectHour($input: ProjectHourInput!) {
-          addPlannedProjectHour(input: $input) { id name hours project createdAt updatedAt }
-        }
-      `,
-      {
-        input: {
-          employeeName: plannedProjectForm.name,
-          hours: parseFloat(plannedProjectForm.hours),
-          project: plannedProjectForm.project
-        }
-      }
-    )
+    if (!isValidHours || !plannedProjectForm.project) return
 
-    const newEntry = data.addPlannedProjectHour
-    setPlannedProjectHours((prev) => [newEntry, ...prev])
+    const addPlannedEntry = async (employeeName) => {
+      const data = await graphqlRequest(
+        `
+          mutation AddPlannedProjectHour($input: ProjectHourInput!) {
+            addPlannedProjectHour(input: $input) { id name hours project createdAt updatedAt }
+          }
+        `,
+        {
+          input: {
+            employeeName,
+            hours: parsedHours,
+            project: plannedProjectForm.project
+          }
+        }
+      )
+
+      return data.addPlannedProjectHour
+    }
+
+    const employeeNames = plannedProjectEmployeeMode === 'bulk'
+      ? plannedProjectBulkEmployees
+      : [plannedProjectForm.name]
+
+    if (!employeeNames.length || employeeNames.some((name) => !name)) return
+
+    const newEntries = await Promise.all(employeeNames.map((employeeName) => addPlannedEntry(employeeName)))
+
+    setPlannedProjectHours((prev) => [...newEntries, ...prev])
     setPlannedProjectForm({ name: '', hours: '', project: '' })
-    void appendTimeLogEntry('add', 'planned-project-hours', { entry: newEntry })
+    setPlannedProjectBulkEmployees([])
+    setPlannedProjectBulkOpen(false)
+
+    newEntries.forEach((entry) => {
+      void appendTimeLogEntry('add', 'planned-project-hours', { entry })
+    })
   }
 
   const updatePlannedProjectHour = async (id, field, value) => {
@@ -1713,14 +1818,20 @@ function App() {
                           <button
                             type="button"
                             className={`employee-training-mode-button ${employeeTrainingMode === 'single' ? 'active' : ''}`}
-                            onClick={() => setEmployeeTrainingMode('single')}
+                            onClick={() => {
+                              setEmployeeTrainingMode('single')
+                              setEmployeeTrainingBulkOpen(false)
+                            }}
                           >
                             Single
                           </button>
                           <button
                             type="button"
                             className={`employee-training-mode-button ${employeeTrainingMode === 'bulk' ? 'active' : ''}`}
-                            onClick={() => setEmployeeTrainingMode('bulk')}
+                            onClick={() => {
+                              setEmployeeTrainingMode('bulk')
+                              setEmployeeTrainingSingle((currentSingle) => ({ ...currentSingle, training: '' }))
+                            }}
                           >
                             Bulk
                           </button>
@@ -1731,17 +1842,17 @@ function App() {
                         <div className="employee-training-grid">
                           <label>
                             <span>Training</span>
-                            <select
+                            <input
+                              list="employee-training-options"
                               value={employeeTrainingSingle.training}
                               onChange={(e) => setEmployeeTrainingSingle({ ...employeeTrainingSingle, training: e.target.value })}
-                            >
-                              <option value="">Select training</option>
-                              {employeeTrainingOptions.map((training) => (
-                                <option key={training} value={training}>
-                                  {training}
-                                </option>
+                              placeholder="Select or type training"
+                            />
+                            <datalist id="employee-training-options">
+                              {trainingListOptions.map((training) => (
+                                <option key={training} value={training} />
                               ))}
-                            </select>
+                            </datalist>
                           </label>
                           <label>
                             <span>Expiry date</span>
@@ -1772,7 +1883,7 @@ function App() {
                             </button>
                             {employeeTrainingBulkOpen && (
                               <div className="employee-training-dropdown-panel">
-                                {employeeTrainingOptions.map((training) => {
+                                {trainingListOptions.map((training) => {
                                   const isSelected = employeeTrainingBulk.trainings.includes(training)
 
                                   return (
@@ -1797,6 +1908,9 @@ function App() {
                                     </label>
                                   )
                                 })}
+                                {trainingListOptions.length === 0 && (
+                                  <p className="employee-training-empty">No training options available yet.</p>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1870,16 +1984,14 @@ function App() {
                                 </span>
                               </button>
                             </th>
-                            <th>Department</th>
                             <th>Coy Number</th>
-                            <th>Email</th>
-                            <th>Phone</th>
                             <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {sortedEmployeeOptions.map((employee) => {
                             const isExpanded = expandedEmployeeId === employee.id
+                            const matchingLabourRate = findLabourRateByRole(employee.role, labourPrices)
 
                             return (
                               <Fragment key={employee.id}>
@@ -1899,10 +2011,7 @@ function App() {
                                 >
                                   <td>{employee.name || 'Not set'}</td>
                                   <td>{employee.role || 'Role not set'}</td>
-                                  <td>{employee.department || 'Department pending'}</td>
                                   <td>{employee.coyNumber || 'Not set'}</td>
-                                  <td>{employee.email || ''}</td>
-                                  <td>{employee.phone || ''}</td>
                                   <td className="employee-actions-cell" onClick={(event) => event.stopPropagation()}>
                                     <div className="employee-list-actions">
                                       <button
@@ -1932,7 +2041,7 @@ function App() {
                                 </tr>
                                 {isExpanded && (
                                   <tr className="employee-details-row">
-                                    <td colSpan="7">
+                                    <td colSpan="4">
                                       <div className="employee-details-panel">
                                         <div className="employee-details-header">
                                           <div>
@@ -1941,32 +2050,74 @@ function App() {
                                           </div>
                                           <span className="employee-details-badge">Expanded</span>
                                         </div>
-                                        {/* <div className="employee-details-grid">
-                                          <div>
-                                            <span>Role</span>
-                                            <strong>{employee.role || 'Role not set'}</strong>
+                                        <div className="employee-rates-section">
+                                          <div className="employee-compliance-header">
+                                            <div>
+                                              <p className="employee-details-kicker">Contact</p>
+                                              <h4>Employee contact details</h4>
+                                            </div>
                                           </div>
-                                          <div>
-                                            <span>Department</span>
-                                            <strong>{employee.department || 'Department pending'}</strong>
+                                          <div className="employee-compliance-table-wrap">
+                                            <table className="employee-compliance-table">
+                                              <thead>
+                                                <tr>
+                                                  <th>Field</th>
+                                                  <th>Value</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                <tr>
+                                                  <td>Department</td>
+                                                  <td className="employee-compliance-placeholder">{employee.department || 'Department pending'}</td>
+                                                </tr>
+                                                <tr>
+                                                  <td>Email</td>
+                                                  <td className="employee-compliance-placeholder">{employee.email || 'Not provided'}</td>
+                                                </tr>
+                                                <tr>
+                                                  <td>Phone</td>
+                                                  <td className="employee-compliance-placeholder">{employee.phone || 'Not provided'}</td>
+                                                </tr>
+                                              </tbody>
+                                            </table>
                                           </div>
-                                          <div>
-                                            <span>Coy number</span>
-                                            <strong>{employee.coyNumber || 'Not set'}</strong>
+                                        </div>
+                                        <div className="employee-rates-section">
+                                          <div className="employee-compliance-header">
+                                            <div>
+                                              <p className="employee-details-kicker">Rates</p>
+                                              <h4>Hourly rates from price calculator</h4>
+                                            </div>
                                           </div>
-                                          <div>
-                                            <span>Email</span>
-                                            <strong>{employee.email || ''}</strong>
-                                          </div>
-                                          <div>
-                                            <span>Phone</span>
-                                            <strong>{employee.phone || ''}</strong>
-                                          </div>
-                                          <div>
-                                            <span>Record ID</span>
-                                            <strong>{employee.id}</strong>
-                                          </div>
-                                        </div> */}
+                                          {matchingLabourRate ? (
+                                            <div className="employee-compliance-table-wrap">
+                                              <table className="employee-compliance-table">
+                                                <thead>
+                                                  <tr>
+                                                    <th>Fee type</th>
+                                                    <th>Hourly rate</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody>
+                                                  <tr>
+                                                    <td>Workshop / Normal</td>
+                                                    <td className="employee-compliance-placeholder">R{matchingLabourRate.normalHourlyRate || 0}/hr</td>
+                                                  </tr>
+                                                  <tr>
+                                                    <td>Onsite (Mine)</td>
+                                                    <td className="employee-compliance-placeholder">R{matchingLabourRate.onsiteHourlyRate || 0}/hr</td>
+                                                  </tr>
+                                                  <tr>
+                                                    <td>Breakdown (Out of Hours)</td>
+                                                    <td className="employee-compliance-placeholder">R{matchingLabourRate.breakdownHourlyRate || 0}/hr</td>
+                                                  </tr>
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          ) : (
+                                            <p className="employee-rates-empty">No hourly rate found for this employee role.</p>
+                                          )}
+                                        </div>
                                         <div className="employee-compliance-section">
                                           <div className="employee-compliance-header">
                                             <div>
@@ -1978,7 +2129,7 @@ function App() {
                                             <table className="employee-compliance-table">
                                               <thead>
                                                 <tr>
-                                                  <th>Requirement</th>
+                                                  {/* <th>Requirement</th> */}
                                                   <th>Expiry date</th>
                                                 </tr>
                                               </thead>
@@ -2306,11 +2457,11 @@ function App() {
                 <div className="time-kpi-grid">
                   <div>
                     <span>Estimated this week</span>
-                    <strong>12.5 hrs</strong>
+                    <strong>{estimatedWeeklyHours.toFixed(1)} hrs</strong>
                   </div>
                   <div>
                     <span>Scheduled activities</span>
-                    <strong>{timeEntries.length} tasks</strong>
+                    <strong>{upcomingActivities.length} tasks</strong>
                   </div>
                 </div>
               </section>
@@ -2328,14 +2479,20 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {timeEntries.map((entry) => (
-                        <tr key={entry.id}>
-                          <td>{entry.title}</td>
-                          <td>{entry.date}</td>
-                          <td>{entry.hours} hrs</td>
-                          <td>{entry.status}</td>
+                      {upcomingActivities.length > 0 ? (
+                        upcomingActivities.map((entry) => (
+                          <tr key={entry.id}>
+                            <td>{entry.activity}</td>
+                            <td>{entry.date}</td>
+                            <td>{entry.hours.toFixed(1)} hrs</td>
+                            <td>{entry.status}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="4">No upcoming activities scheduled.</td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -2582,17 +2739,80 @@ function App() {
                 </div>
                 {currentProjectFormOpen && (
                   <div className="time-form">
-                    <select
-                      value={currentProjectForm.name}
-                      onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, name: e.target.value })}
-                    >
-                      <option value="">Select employee</option>
-                      {employeeOptions.map((employee) => (
-                        <option key={employee.id} value={employee.name}>
-                          {employee.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="employee-training-mode-toggle" role="tablist" aria-label="Current project employee add mode">
+                      <button
+                        type="button"
+                        className={`employee-training-mode-button ${currentProjectEmployeeMode === 'single' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCurrentProjectEmployeeMode('single')
+                          setCurrentProjectBulkOpen(false)
+                        }}
+                      >
+                        Single
+                      </button>
+                      <button
+                        type="button"
+                        className={`employee-training-mode-button ${currentProjectEmployeeMode === 'bulk' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCurrentProjectEmployeeMode('bulk')
+                          setCurrentProjectForm((currentForm) => ({ ...currentForm, name: '' }))
+                        }}
+                      >
+                        Bulk
+                      </button>
+                    </div>
+                    {currentProjectEmployeeMode === 'single' ? (
+                      <select
+                        value={currentProjectForm.name}
+                        onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, name: e.target.value })}
+                      >
+                        <option value="">Select employee</option>
+                        {sortedEmployeeOptions.map((employee) => (
+                          <option key={employee.id} value={employee.name}>
+                            {employee.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="employee-training-select-wrapper">
+                        <span>Employees</span>
+                        <button
+                          type="button"
+                          className="employee-training-dropdown-button"
+                          onClick={() => setCurrentProjectBulkOpen((open) => !open)}
+                        >
+                          {currentProjectBulkEmployees.length > 0
+                            ? `${currentProjectBulkEmployees.length} selected`
+                            : 'Choose employees'}
+                        </button>
+                        {currentProjectBulkOpen && (
+                          <div className="employee-training-dropdown-panel">
+                            {sortedEmployeeOptions.map((employee) => {
+                              const isSelected = currentProjectBulkEmployees.includes(employee.name)
+
+                              return (
+                                <label key={employee.id} className="employee-training-checkbox-row">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      setCurrentProjectBulkEmployees((currentEmployees) => {
+                                        if (isSelected) {
+                                          return currentEmployees.filter((employeeName) => employeeName !== employee.name)
+                                        }
+
+                                        return [...currentEmployees, employee.name]
+                                      })
+                                    }}
+                                  />
+                                  <span>{employee.name}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <input
                       type="number"
                       step="0.5"
@@ -2606,7 +2826,9 @@ function App() {
                       value={currentProjectForm.project}
                       onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, project: e.target.value })}
                     />
-                    <button type="button" className="btn-add" onClick={addCurrentProjectHour}>Add</button>
+                    <button type="button" className="btn-add" onClick={addCurrentProjectHour}>
+                      {currentProjectEmployeeMode === 'bulk' ? 'Add selected employees' : 'Add'}
+                    </button>
                   </div>
                 )}
               </section>
@@ -2712,17 +2934,80 @@ function App() {
                 </div>
                 {plannedProjectFormOpen && (
                   <div className="time-form">
-                    <select
-                      value={plannedProjectForm.name}
-                      onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, name: e.target.value })}
-                    >
-                      <option value="">Select employee</option>
-                      {employeeOptions.map((employee) => (
-                        <option key={employee.id} value={employee.name}>
-                          {employee.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="employee-training-mode-toggle" role="tablist" aria-label="Planned project employee add mode">
+                      <button
+                        type="button"
+                        className={`employee-training-mode-button ${plannedProjectEmployeeMode === 'single' ? 'active' : ''}`}
+                        onClick={() => {
+                          setPlannedProjectEmployeeMode('single')
+                          setPlannedProjectBulkOpen(false)
+                        }}
+                      >
+                        Single
+                      </button>
+                      <button
+                        type="button"
+                        className={`employee-training-mode-button ${plannedProjectEmployeeMode === 'bulk' ? 'active' : ''}`}
+                        onClick={() => {
+                          setPlannedProjectEmployeeMode('bulk')
+                          setPlannedProjectForm((currentForm) => ({ ...currentForm, name: '' }))
+                        }}
+                      >
+                        Bulk
+                      </button>
+                    </div>
+                    {plannedProjectEmployeeMode === 'single' ? (
+                      <select
+                        value={plannedProjectForm.name}
+                        onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, name: e.target.value })}
+                      >
+                        <option value="">Select employee</option>
+                        {sortedEmployeeOptions.map((employee) => (
+                          <option key={employee.id} value={employee.name}>
+                            {employee.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="employee-training-select-wrapper">
+                        <span>Employees</span>
+                        <button
+                          type="button"
+                          className="employee-training-dropdown-button"
+                          onClick={() => setPlannedProjectBulkOpen((open) => !open)}
+                        >
+                          {plannedProjectBulkEmployees.length > 0
+                            ? `${plannedProjectBulkEmployees.length} selected`
+                            : 'Choose employees'}
+                        </button>
+                        {plannedProjectBulkOpen && (
+                          <div className="employee-training-dropdown-panel">
+                            {sortedEmployeeOptions.map((employee) => {
+                              const isSelected = plannedProjectBulkEmployees.includes(employee.name)
+
+                              return (
+                                <label key={employee.id} className="employee-training-checkbox-row">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      setPlannedProjectBulkEmployees((currentEmployees) => {
+                                        if (isSelected) {
+                                          return currentEmployees.filter((employeeName) => employeeName !== employee.name)
+                                        }
+
+                                        return [...currentEmployees, employee.name]
+                                      })
+                                    }}
+                                  />
+                                  <span>{employee.name}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <input
                       type="number"
                       step="0.5"
@@ -2736,7 +3021,9 @@ function App() {
                       value={plannedProjectForm.project}
                       onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, project: e.target.value })}
                     />
-                    <button type="button" className="btn-add" onClick={addPlannedProjectHour}>Add</button>
+                    <button type="button" className="btn-add" onClick={addPlannedProjectHour}>
+                      {plannedProjectEmployeeMode === 'bulk' ? 'Add selected employees' : 'Add'}
+                    </button>
                   </div>
                 )}
               </section>
@@ -2822,7 +3109,7 @@ function App() {
                 </div>
               </div>
 
-              <table className="items-table">
+              <table className={`items-table ${pdfTemplateMode === 'quote' ? '' : 'report-items-table'}`.trim()}>
                 <thead>
                   <tr>
                     <th style={{width: '8%'}}>QTY</th>
@@ -2911,7 +3198,7 @@ function App() {
                           <th style={{width: '18%'}}>NAME</th>
                           <th style={{width: '14%'}}>ROLE</th>
                           <th style={{width: '14%'}}>DEPARTMENT</th>
-                          <th style={{width: '54%', textAlign: 'left'}}>CONTACT & COMPLIANCE</th>
+                          <th style={{width: '54%', textAlign: 'left'}}>CONTACT, COMPLIANCE & RATES</th>
                         </>
                       )
                     )}
@@ -2978,23 +3265,45 @@ function App() {
                       ))}
                     </>
                   ) : (
-                    sortedEmployeeOptions.map((employee) => (
-                      <tr key={employee.id}>
-                        <td>{employee.name || 'Unknown'}</td>
-                        <td>{employee.role || '-'}</td>
-                        <td>{employee.department || '-'}</td>
-                        <td>
-                          {[
-                            `Email: ${employee.email || '-'}`,
-                            `Phone: ${employee.phone || '-'}`,
-                            `Induction Expiry: ${employee.inductionExpiryDate || '-'}`,
-                            `Training: ${Array.isArray(employee.trainingRecords) && employee.trainingRecords.length > 0
-                              ? employee.trainingRecords.map((record) => `${record.training} (${record.expiryDate || '-'})`).join('; ')
-                              : 'Not assigned'}`
-                          ].join('\n')}
-                        </td>
-                      </tr>
-                    ))
+                    sortedEmployeeOptions.map((employee) => {
+                      const matchingLabourRate = findLabourRateByRole(employee.role, labourPrices)
+                      const trainingSummary = Array.isArray(employee.trainingRecords) && employee.trainingRecords.length > 0
+                        ? employee.trainingRecords.map((record) => `${record.training} (${record.expiryDate || '-'})`).join('; ')
+                        : 'Not assigned'
+                      const ratesSummary = matchingLabourRate
+                        ? `Normal R${matchingLabourRate.normalHourlyRate || 0}/hr | Onsite R${matchingLabourRate.onsiteHourlyRate || 0}/hr | Breakdown R${matchingLabourRate.breakdownHourlyRate || 0}/hr`
+                        : 'No rate mapped for role'
+
+                      return (
+                        <tr key={employee.id}>
+                          <td>{employee.name || 'Unknown'}</td>
+                          <td>{employee.role || '-'}</td>
+                          <td>{employee.department || '-'}</td>
+                          <td className="report-employee-details-cell">
+                            <div className="report-employee-line">
+                              <span className="report-employee-label">Email</span>
+                              <span className="report-employee-value">{employee.email || '-'}</span>
+                            </div>
+                            <div className="report-employee-line">
+                              <span className="report-employee-label">Phone</span>
+                              <span className="report-employee-value">{employee.phone || '-'}</span>
+                            </div>
+                            <div className="report-employee-line">
+                              <span className="report-employee-label">Induction Expiry</span>
+                              <span className="report-employee-value">{employee.inductionExpiryDate || '-'}</span>
+                            </div>
+                            <div className="report-employee-line">
+                              <span className="report-employee-label">Training</span>
+                              <span className="report-employee-value">{trainingSummary}</span>
+                            </div>
+                            <div className="report-employee-line report-employee-line-rates">
+                              <span className="report-employee-label">Rates</span>
+                              <span className="report-employee-value">{ratesSummary}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>

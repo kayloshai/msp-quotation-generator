@@ -4,6 +4,7 @@ import { initializeDatabase } from './db.js'
 import { resolvers, typeDefs } from './schema.js'
 
 const port = Number.parseInt(process.env.GRAPHQL_PORT || '4000', 10)
+const host = process.env.GRAPHQL_HOST || '0.0.0.0'
 
 const bootstrap = async () => {
   await initializeDatabase()
@@ -14,7 +15,7 @@ const bootstrap = async () => {
   })
 
   const { url } = await startStandaloneServer(server, {
-    listen: { port }
+    listen: { port, host }
   })
 
   // eslint-disable-next-line no-console

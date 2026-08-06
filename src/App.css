@@ -910,7 +910,7 @@
   align-items: end;
 }
 
-.employee-training-grid label {
+.employee-training-grid > label {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -918,8 +918,8 @@
   font-weight: 600;
 }
 
-.employee-training-grid input,
-.employee-training-grid select {
+.employee-training-grid > label input,
+.employee-training-grid > label select {
   width: 100%;
   padding: 0.7rem;
   border: 1px solid var(--color-border-tint);
@@ -972,6 +972,11 @@
   color: var(--color-green-700);
 }
 
+.employee-form-grid .employee-training-checkbox-row {
+  flex-direction: row;
+  font-weight: 500;
+}
+
 .employee-training-checkbox-row:hover {
   background: var(--color-primary-tint-2);
 }
@@ -980,6 +985,16 @@
   min-height: 0;
   width: 16px;
   height: 16px;
+  padding: 0;
+  margin: 0;
+  border-radius: 4px;
+  flex: 0 0 16px;
+}
+
+.employee-form-grid .employee-training-checkbox-row input {
+  width: 16px;
+  min-width: 16px;
+  max-width: 16px;
 }
 
 .employee-training-actions {
@@ -1208,6 +1223,19 @@
 
 .employee-compliance-section {
   margin-top: 1rem;
+}
+
+.employee-rates-section {
+  margin-top: 0.35rem;
+}
+
+.employee-rates-empty {
+  margin: 0;
+  padding: 0.8rem;
+  border: 1px dashed var(--color-border-tint);
+  border-radius: 10px;
+  color: var(--color-text-muted-green);
+  background: var(--color-white);
 }
 
 .employee-compliance-header {
@@ -1724,6 +1752,50 @@
 
 .items-table td.text-right {
   text-align: right;
+}
+
+.report-items-table th,
+.report-items-table td,
+.report-items-table td.text-right,
+.report-items-table td.text-center {
+  text-align: left !important;
+}
+
+.report-employee-details-cell {
+  text-align: left !important;
+  white-space: normal !important;
+}
+
+.report-employee-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 2px 0;
+}
+
+.report-employee-line:last-child {
+  margin-bottom: 0;
+}
+
+.report-employee-line-rates {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.report-employee-label {
+  min-width: 86px;
+  font-weight: 700;
+  color: var(--color-green-600);
+  text-align: left;
+}
+
+.report-employee-value {
+  flex: 1;
+  color: var(--color-text);
+  text-align: left;
+  word-break: break-word;
 }
 
 .items-table tbody tr {
