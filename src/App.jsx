@@ -3,7 +3,7 @@ import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import './App.css'
 
-const validPages = ['builder', 'history', 'preview', 'time-management', 'employee-management', 'price-calculator']
+const validPages = ['builder', 'history', 'preview', 'time-management', 'employee-management', 'price-calculator', 'list-management']
 const coyNumberPattern = /^\d{8}$/
 const employeeTrainingOptions = [
   'Basic rigging',
@@ -11,6 +11,14 @@ const employeeTrainingOptions = [
   'Working at heights level 2',
   'Basic fire fighting'
 ]
+const defaultQuoteItems = ['Manufacture', 'Fabricate', 'Supply']
+const defaultManagedLists = {
+  roles: [],
+  trainings: [...employeeTrainingOptions],
+  departments: [],
+  projects: [],
+  quoteItems: [...defaultQuoteItems]
+}
 const runtimeHost = typeof window === 'undefined' ? 'localhost' : window.location.hostname
 const graphqlEndpoint = import.meta.env.VITE_GRAPHQL_URL || `http://${runtimeHost}:4000/`
 
@@ -144,9 +152,40 @@ const formatReportTimestampSegment = (date) => {
   return `${year}${month}${day}-${hour}${minute}${second}`
 }
 
+const toSlugValue = (value) => {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+const normalizeUniqueList = (values) => {
+  return Array.from(
+    new Map(
+      (Array.isArray(values) ? values : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+        .map((value) => [value.toLowerCase(), value])
+    ).values()
+  ).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true }))
+}
+
+const normalizeManagedListSettings = (value = {}) => {
+  return {
+    roles: normalizeUniqueList(value.roles || []),
+    trainings: normalizeUniqueList(value.trainings || []),
+    departments: normalizeUniqueList(value.departments || []),
+    projects: normalizeUniqueList(value.projects || []),
+    quoteItems: normalizeUniqueList(value.quoteItems || [])
+  }
+}
+
 function App() {
   const quotationRef = useRef()
   const [vendorOptions, setVendorOptions] = useState([])
+  const [vendorForm, setVendorForm] = useState({ company: '', vatNumber: '', quotationTo: '', shippingAddress: '' })
+  const [editingVendorId, setEditingVendorId] = useState(null)
   const [quotationNumber, setQuotationNumber] = useState('QUO1')
   const [quotationDate, setQuotationDate] = useState(new Date().toISOString().split('T')[0])
   const [quotationTo, setQuotationTo] = useState('')
@@ -218,13 +257,23 @@ function App() {
   const [linerPlates, setLinerPlates] = useState([])
   const [selectedLinerPlate, setSelectedLinerPlate] = useState(linerPlates[0]?.id || null)
   const [isDbHydrated, setIsDbHydrated] = useState(false)
+  const [isListManagementHydrated, setIsListManagementHydrated] = useState(false)
   const [reportMetadata, setReportMetadata] = useState({
     reportNumber: 0,
     generatedAtIso: '',
     fileName: ''
   })
+  const [managedLists, setManagedLists] = useState(defaultManagedLists)
+  const [listDrafts, setListDrafts] = useState({
+    roles: '',
+    trainings: '',
+    departments: '',
+    projects: '',
+    quoteItems: ''
+  })
+  const [listManagementStatus, setListManagementStatus] = useState('Manage reusable dropdown lists used across forms.')
   const [lineItems, setLineItems] = useState([
-    { id: 1, qty: '', item: 'manufacture', description: '', unitPrice: '' }
+    { id: 1, qty: '', item: toSlugValue(defaultQuoteItems[0]), description: '', unitPrice: '' }
   ])
 
   const upsertEmployeeTrainingRecords = (records) => {
@@ -330,23 +379,6 @@ function App() {
     return Number(left?.id || 0) - Number(right?.id || 0)
   })
 
-  const trainingListOptions = Array.from(
-    new Map(
-      [
-        ...employeeTrainingOptions,
-        ...employeeOptions.flatMap((employee) => (
-          Array.isArray(employee?.trainingRecords)
-            ? employee.trainingRecords.map((record) => String(record?.training || '').trim())
-            : []
-        )),
-        ...employeeTrainingRecords.map((record) => String(record?.training || '').trim())
-      ]
-        .map((training) => String(training || '').trim())
-        .filter(Boolean)
-        .map((training) => [training.toLowerCase(), training])
-    ).values()
-  ).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true }))
-
   const latestUpdatedEmployee = employeeOptions.reduce((latestEmployee, currentEmployee) => {
     if (!latestEmployee) {
       return currentEmployee
@@ -397,6 +429,13 @@ function App() {
     setTimeLogEntries(bootstrap.timeLogEntries || [])
     setQuotationHistory(bootstrap.quotationHistory || [])
     setPanelDescription(bootstrap.panelDescription || '')
+    setManagedLists(
+      normalizeManagedListSettings({
+        ...defaultManagedLists,
+        ...(bootstrap.listManagement || {})
+      })
+    )
+    setIsListManagementHydrated(true)
 
     const materialItems = bootstrap.materialItems || []
     const nextPlates = materialItems.filter((item) => item.category === 'plates')
@@ -479,6 +518,13 @@ function App() {
                   plannedProjectHours { id name hours project createdAt updatedAt }
                   timeEntries { id title date hours status }
                   timeLogEntries { id action group section timestamp details }
+                  listManagement {
+                    roles
+                    trainings
+                    departments
+                    projects
+                    quoteItems
+                  }
                 }
               }
             `
@@ -523,6 +569,13 @@ function App() {
                   plannedProjectHours { id name hours project createdAt updatedAt }
                   timeEntries { id title date hours status }
                   timeLogEntries { id action group section timestamp details }
+                  listManagement {
+                    roles
+                    trainings
+                    departments
+                    projects
+                    quoteItems
+                  }
                 }
               }
             `
@@ -582,11 +635,109 @@ function App() {
     setEmployeeOptions((prev) => sanitizeEmployeeRoster(prev, labourTitleOptions))
   }, [labourTitleOptions])
 
-  const itemOptions = [
-    { value: 'manufacture', label: 'Manufacture' },
-    { value: 'fabricate', label: 'Fabricate' },
-    { value: 'supply', label: 'Supply' }
-  ]
+  useEffect(() => {
+    if (!isDbHydrated || !isListManagementHydrated) return
+
+    void graphqlRequest(
+      `
+        mutation SaveListManagement($input: ListManagementInput!) {
+          saveListManagement(input: $input) {
+            roles
+            trainings
+            departments
+            projects
+            quoteItems
+          }
+        }
+      `,
+      {
+        input: managedLists
+      }
+    ).catch((error) => {
+      console.error('Failed to save list settings', error)
+      setListManagementStatus('Failed to save list settings. Ensure API is running.')
+    })
+  }, [managedLists, isDbHydrated, isListManagementHydrated])
+
+  const roleOptions = normalizeUniqueList([
+    ...labourTitleOptions,
+    ...employeeOptions.map((employee) => employee.role),
+    ...managedLists.roles
+  ])
+
+  const departmentOptions = normalizeUniqueList([
+    ...employeeOptions.map((employee) => employee.department),
+    ...managedLists.departments
+  ])
+
+  const projectOptions = normalizeUniqueList([
+    ...currentProjectHours.map((entry) => entry.project),
+    ...plannedProjectHours.map((entry) => entry.project),
+    ...managedLists.projects
+  ])
+
+  const quoteItemLabels = normalizeUniqueList(managedLists.quoteItems)
+
+  const itemOptions = quoteItemLabels.map((label) => ({
+    value: toSlugValue(label),
+    label
+  }))
+
+  const trainingListOptions = normalizeUniqueList([
+    ...employeeOptions.flatMap((employee) => (
+      Array.isArray(employee?.trainingRecords)
+        ? employee.trainingRecords.map((record) => String(record?.training || '').trim())
+        : []
+    )),
+    ...employeeTrainingRecords.map((record) => String(record?.training || '').trim()),
+    ...managedLists.trainings
+  ])
+
+  const addManagedListItem = (listKey) => {
+    const nextValue = String(listDrafts[listKey] || '').trim()
+    if (!nextValue) return
+
+    setManagedLists((currentLists) => ({
+      ...currentLists,
+      [listKey]: normalizeUniqueList([...(currentLists[listKey] || []), nextValue])
+    }))
+
+    setListDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [listKey]: ''
+    }))
+    setListManagementStatus('List updated.')
+  }
+
+  const removeManagedListItem = (listKey, value) => {
+    setManagedLists((currentLists) => ({
+      ...currentLists,
+      [listKey]: (currentLists[listKey] || []).filter((item) => item !== value)
+    }))
+    setListManagementStatus('List updated.')
+  }
+
+  const editManagedListItem = (listKey, currentValue) => {
+    const nextValue = typeof window === 'undefined'
+      ? currentValue
+      : window.prompt('Edit list value', currentValue)
+
+    if (nextValue === null) return
+
+    const cleanedValue = String(nextValue || '').trim()
+    if (!cleanedValue) {
+      removeManagedListItem(listKey, currentValue)
+      return
+    }
+
+    setManagedLists((currentLists) => ({
+      ...currentLists,
+      [listKey]: normalizeUniqueList(
+        (currentLists[listKey] || []).map((item) => (item === currentValue ? cleanedValue : item))
+      )
+    }))
+    setListManagementStatus('List updated.')
+  }
 
   const handleVendorSelection = (value, target) => {
     const selectedVendor = vendorOptions.find((vendor) => vendor.id === value)
@@ -599,6 +750,114 @@ function App() {
       setSelectedShippingVendorId(value)
       setShippingAddress(selectedVendor.shippingAddress)
     }
+  }
+
+  useEffect(() => {
+    const selectedQuotationVendor = vendorOptions.find((vendor) => vendor.id === selectedQuotationVendorId)
+    if (selectedQuotationVendor) {
+      setQuotationTo(selectedQuotationVendor.quotationTo || '')
+    } else if (vendorOptions[0]) {
+      setSelectedQuotationVendorId(vendorOptions[0].id)
+      setQuotationTo(vendorOptions[0].quotationTo || '')
+    }
+
+    const selectedShippingVendor = vendorOptions.find((vendor) => vendor.id === selectedShippingVendorId)
+    if (selectedShippingVendor) {
+      setShippingAddress(selectedShippingVendor.shippingAddress || '')
+    } else if (vendorOptions[0]) {
+      setSelectedShippingVendorId(vendorOptions[0].id)
+      setShippingAddress(vendorOptions[0].shippingAddress || '')
+    }
+
+    if (vendorOptions.length === 0) {
+      setSelectedQuotationVendorId('')
+      setSelectedShippingVendorId('')
+      setQuotationTo('')
+      setShippingAddress('')
+    }
+  }, [vendorOptions, selectedQuotationVendorId, selectedShippingVendorId])
+
+  const resetVendorForm = () => {
+    setVendorForm({ company: '', vatNumber: '', quotationTo: '', shippingAddress: '' })
+    setEditingVendorId(null)
+  }
+
+  const saveVendorRecords = async (nextVendors) => {
+    const data = await graphqlRequest(
+      `
+        mutation SaveVendors($items: [VendorInput!]!) {
+          saveVendors(items: $items) {
+            id
+            company
+            vatNumber
+            quotationTo
+            shippingAddress
+          }
+        }
+      `,
+      {
+        items: nextVendors.map((vendor) => ({
+          id: vendor.id,
+          company: vendor.company,
+          vatNumber: vendor.vatNumber || '',
+          quotationTo: vendor.quotationTo || '',
+          shippingAddress: vendor.shippingAddress || ''
+        }))
+      }
+    )
+
+    setVendorOptions(data.saveVendors || [])
+    return data.saveVendors || []
+  }
+
+  const handleVendorManagementSubmit = async (event) => {
+    event.preventDefault()
+
+    const nextCompany = String(vendorForm.company || '').trim()
+    const nextQuotationTo = String(vendorForm.quotationTo || '').trim()
+    const nextShippingAddress = String(vendorForm.shippingAddress || '').trim()
+
+    if (!nextCompany || !nextQuotationTo || !nextShippingAddress) {
+      setListManagementStatus('Company, quotation to, and shipping address are required.')
+      return
+    }
+
+    const nextRecord = {
+      id: editingVendorId || `vendor-${Date.now()}`,
+      company: nextCompany,
+      vatNumber: String(vendorForm.vatNumber || '').trim(),
+      quotationTo: nextQuotationTo,
+      shippingAddress: nextShippingAddress
+    }
+
+    const nextVendors = editingVendorId
+      ? vendorOptions.map((vendor) => (vendor.id === editingVendorId ? nextRecord : vendor))
+      : [...vendorOptions, nextRecord]
+
+    await saveVendorRecords(nextVendors)
+    resetVendorForm()
+    setListManagementStatus('Customer address list updated.')
+  }
+
+  const startEditingVendor = (vendor) => {
+    setEditingVendorId(vendor.id)
+    setVendorForm({
+      company: vendor.company || '',
+      vatNumber: vendor.vatNumber || '',
+      quotationTo: vendor.quotationTo || '',
+      shippingAddress: vendor.shippingAddress || ''
+    })
+  }
+
+  const removeVendorRecord = async (vendorId) => {
+    const nextVendors = vendorOptions.filter((vendor) => vendor.id !== vendorId)
+    await saveVendorRecords(nextVendors)
+
+    if (editingVendorId === vendorId) {
+      resetVendorForm()
+    }
+
+    setListManagementStatus('Customer address list updated.')
   }
 
   const calculateLineTotal = (qty, unitPrice) => {
@@ -629,9 +888,10 @@ function App() {
 
   const addLineItem = () => {
     const newId = Math.max(...lineItems.map(item => item.id), 0) + 1
+    const defaultItemValue = itemOptions[0]?.value || ''
     setLineItems([
       ...lineItems,
-      { id: newId, qty: '', item: 'manufacture', description: '', unitPrice: '' }
+      { id: newId, qty: '', item: defaultItemValue, description: '', unitPrice: '' }
     ])
   }
 
@@ -943,8 +1203,8 @@ function App() {
       trainingRecords: trainingRecordsPayload
     }
 
-    if (!labourTitleOptions.includes(employeeManagementForm.role)) {
-      setEmployeeManagementStatus('Please select a valid role from labour titles.')
+    if (!roleOptions.includes(employeeManagementForm.role)) {
+      setEmployeeManagementStatus('Please select a valid role from the managed role list.')
       return
     }
 
@@ -1404,6 +1664,14 @@ function App() {
             <span className="nav-icon">💰</span>
             Price Calculator
           </button>
+          <button
+            type="button"
+            className={`nav-item ${activePage === 'list-management' ? 'active' : ''}`}
+            onClick={() => setActivePage('list-management')}
+          >
+            <span className="nav-icon">🗂️</span>
+            List Management
+          </button>
         </nav>
 
         <div className="sidebar-card">
@@ -1421,7 +1689,7 @@ function App() {
         <header className="app-header">
           <div>
             <p className="eyebrow">Multi-page workspace</p>
-            <h1>{activePage === 'builder' ? 'Quote builder' : activePage === 'history' ? 'Quotation history' : activePage === 'time-management' ? 'Time management' : activePage === 'employee-management' ? 'Employee management' : activePage === 'price-calculator' ? 'Price calculator' : 'PDF preview'}</h1>
+            <h1>{activePage === 'builder' ? 'Quote builder' : activePage === 'history' ? 'Quotation history' : activePage === 'time-management' ? 'Time management' : activePage === 'employee-management' ? 'Employee management' : activePage === 'price-calculator' ? 'Price calculator' : activePage === 'list-management' ? 'List management' : 'PDF preview'}</h1>
           </div>
           <div className="header-actions">
             {/* <button type="button" className="btn-secondary" onClick={() => setActivePage('history')}>
@@ -1562,6 +1830,9 @@ function App() {
                               value={item.item}
                               onChange={(e) => handleLineItemChange(item.id, 'item', e.target.value)}
                             >
+                              {itemOptions.length === 0 ? (
+                                <option value="">No quote items configured</option>
+                              ) : null}
                               {itemOptions.map(opt => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                               ))}
@@ -1755,8 +2026,8 @@ function App() {
                         value={employeeManagementForm.role}
                         onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, role: e.target.value })}
                       >
-                        <option value="">Select labour role</option>
-                        {labourTitleOptions.map((title) => (
+                        <option value="">Select role</option>
+                        {roleOptions.map((title) => (
                           <option key={title} value={title}>
                             {title}
                           </option>
@@ -1766,10 +2037,16 @@ function App() {
                     <label>
                       <span>Department</span>
                       <input
+                        list="department-options"
                         value={employeeManagementForm.department}
                         onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, department: e.target.value })}
                         placeholder="Department"
                       />
+                      <datalist id="department-options">
+                        {departmentOptions.map((department) => (
+                          <option key={department} value={department} />
+                        ))}
+                      </datalist>
                     </label>
                     <label>
                       <span>Coy number</span>
@@ -2719,6 +2996,7 @@ function App() {
                                       placeholder="Hours"
                                     />
                                     <input
+                                      list="project-options"
                                       value={entry.project}
                                       onChange={(e) => updateCurrentProjectHour(entry.id, 'project', e.target.value)}
                                       placeholder="Project"
@@ -2822,10 +3100,16 @@ function App() {
                     />
                     <input
                       type="text"
+                      list="project-options"
                       placeholder="Project"
                       value={currentProjectForm.project}
                       onChange={(e) => setCurrentProjectForm({ ...currentProjectForm, project: e.target.value })}
                     />
+                    <datalist id="project-options">
+                      {projectOptions.map((project) => (
+                        <option key={project} value={project} />
+                      ))}
+                    </datalist>
                     <button type="button" className="btn-add" onClick={addCurrentProjectHour}>
                       {currentProjectEmployeeMode === 'bulk' ? 'Add selected employees' : 'Add'}
                     </button>
@@ -2914,6 +3198,7 @@ function App() {
                                       placeholder="Hours"
                                     />
                                     <input
+                                      list="project-options"
                                       value={entry.project}
                                       onChange={(e) => updatePlannedProjectHour(entry.id, 'project', e.target.value)}
                                       placeholder="Project"
@@ -3017,6 +3302,7 @@ function App() {
                     />
                     <input
                       type="text"
+                      list="project-options"
                       placeholder="Project"
                       value={plannedProjectForm.project}
                       onChange={(e) => setPlannedProjectForm({ ...plannedProjectForm, project: e.target.value })}
@@ -3028,6 +3314,210 @@ function App() {
                 )}
               </section>
             </div>
+          </section>
+        )}
+
+        {activePage === 'list-management' && (
+          <section className="page-card">
+            <div className="page-header">
+              <div>
+                <p className="section-kicker">Configuration</p>
+                <h2>Reusable lists</h2>
+              </div>
+              <span className="page-badge">Data source</span>
+            </div>
+
+            <p className="time-log-status">{listManagementStatus}</p>
+
+            <div className="list-management-grid">
+              {[
+                { key: 'roles', title: 'Roles', hint: 'Used by employee role selection.' },
+                { key: 'trainings', title: 'Trainings', hint: 'Used by training compliance (single and bulk).' },
+                { key: 'departments', title: 'Departments', hint: 'Used by employee department entry.' },
+                { key: 'projects', title: 'Projects', hint: 'Used by current/planned project forms.' },
+                { key: 'quoteItems', title: 'Quote items', hint: 'Used by line-item ITEM dropdown.' }
+              ].map((listConfig) => {
+                const listValues = managedLists[listConfig.key] || []
+
+                return (
+                  <section key={listConfig.key} className="list-management-card">
+                    <div className="list-management-card-header">
+                      <div>
+                        <h3>{listConfig.title}</h3>
+                        <p>{listConfig.hint}</p>
+                      </div>
+                      <strong>{listValues.length}</strong>
+                    </div>
+
+                    {listValues.length === 0 ? (
+                      <p className="list-management-empty">No items added yet.</p>
+                    ) : (
+                      <ul className="list-management-list">
+                        {listValues.map((value) => (
+                          <li key={`${listConfig.key}-${value}`}>
+                            <span>{value}</span>
+                            <div className="list-management-actions">
+                              <button
+                                type="button"
+                                className="employee-action-btn employee-action-btn-edit"
+                                onClick={() => editManagedListItem(listConfig.key, value)}
+                                aria-label={`Edit ${value}`}
+                                title={`Edit ${value}`}
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                  <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l10.06-10.06.92.92L5.92 19.58zM20.71 5.63a1 1 0 0 0 0-1.41L19.78 3.29a1 1 0 0 0-1.41 0l-1.15 1.15 3.75 3.75 1.74-1.56z" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                className="employee-action-btn employee-action-btn-delete"
+                                onClick={() => removeManagedListItem(listConfig.key, value)}
+                                aria-label={`Remove ${value}`}
+                                title={`Remove ${value}`}
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                  <path d="M6 7h12l-1 14H7L6 7zm3-4h6l1 2h4v2H4V5h4l1-2z" />
+                                </svg>
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <div className="list-management-add-row">
+                      <input
+                        type="text"
+                        value={listDrafts[listConfig.key] || ''}
+                        onChange={(event) => {
+                          const { value } = event.target
+                          setListDrafts((currentDrafts) => ({
+                            ...currentDrafts,
+                            [listConfig.key]: value
+                          }))
+                        }}
+                        placeholder={`Add ${listConfig.title.toLowerCase().slice(0, -1) || 'item'}`}
+                      />
+                      <button
+                        type="button"
+                        className="btn-add"
+                        onClick={() => addManagedListItem(listConfig.key)}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </section>
+                )
+              })}
+            </div>
+
+            <section className="list-management-vendor-card">
+              <div className="list-management-card-header">
+                <div>
+                  <h3>Customer addresses</h3>
+                  <p>Used by the Quotation To and Shipping Address dropdowns on Create Quote.</p>
+                </div>
+                <strong>{vendorOptions.length}</strong>
+              </div>
+
+              {vendorOptions.length === 0 ? (
+                <p className="list-management-empty">No customer address records added yet.</p>
+              ) : (
+                <div className="list-management-vendor-list">
+                  {vendorOptions.map((vendor) => (
+                    <article key={vendor.id} className="list-management-vendor-item">
+                      <div className="list-management-vendor-copy">
+                        <h4>{vendor.company}</h4>
+                        {vendor.vatNumber ? <p>VAT: {vendor.vatNumber}</p> : null}
+                        <div className="list-management-vendor-addresses">
+                          <div>
+                            <span>Quotation To</span>
+                            <pre>{vendor.quotationTo || '-'}</pre>
+                          </div>
+                          <div>
+                            <span>Shipping Address</span>
+                            <pre>{vendor.shippingAddress || '-'}</pre>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="list-management-actions">
+                        <button
+                          type="button"
+                          className="employee-action-btn employee-action-btn-edit"
+                          onClick={() => startEditingVendor(vendor)}
+                          aria-label={`Edit ${vendor.company}`}
+                          title={`Edit ${vendor.company}`}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l10.06-10.06.92.92L5.92 19.58zM20.71 5.63a1 1 0 0 0 0-1.41L19.78 3.29a1 1 0 0 0-1.41 0l-1.15 1.15 3.75 3.75 1.74-1.56z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          className="employee-action-btn employee-action-btn-delete"
+                          onClick={() => removeVendorRecord(vendor.id)}
+                          aria-label={`Remove ${vendor.company}`}
+                          title={`Remove ${vendor.company}`}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <path d="M6 7h12l-1 14H7L6 7zm3-4h6l1 2h4v2H4V5h4l1-2z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+
+              <form className="list-management-vendor-form" onSubmit={handleVendorManagementSubmit}>
+                <label>
+                  <span>Company</span>
+                  <input
+                    type="text"
+                    value={vendorForm.company}
+                    onChange={(event) => setVendorForm((currentForm) => ({ ...currentForm, company: event.target.value }))}
+                    placeholder="Company name"
+                  />
+                </label>
+                <label>
+                  <span>VAT number</span>
+                  <input
+                    type="text"
+                    value={vendorForm.vatNumber}
+                    onChange={(event) => setVendorForm((currentForm) => ({ ...currentForm, vatNumber: event.target.value }))}
+                    placeholder="Optional VAT number"
+                  />
+                </label>
+                <label className="list-management-vendor-form-full">
+                  <span>Quotation To</span>
+                  <textarea
+                    value={vendorForm.quotationTo}
+                    onChange={(event) => setVendorForm((currentForm) => ({ ...currentForm, quotationTo: event.target.value }))}
+                    placeholder="Customer / quotation address"
+                    rows="4"
+                  />
+                </label>
+                <label className="list-management-vendor-form-full">
+                  <span>Shipping Address</span>
+                  <textarea
+                    value={vendorForm.shippingAddress}
+                    onChange={(event) => setVendorForm((currentForm) => ({ ...currentForm, shippingAddress: event.target.value }))}
+                    placeholder="Shipping / delivery address"
+                    rows="4"
+                  />
+                </label>
+                <div className="list-management-vendor-form-actions">
+                  {editingVendorId ? (
+                    <button type="button" className="btn-secondary" onClick={resetVendorForm}>
+                      Cancel
+                    </button>
+                  ) : null}
+                  <button type="submit" className="btn-add">
+                    {editingVendorId ? 'Save customer' : 'Add customer'}
+                  </button>
+                </div>
+              </form>
+            </section>
           </section>
         )}
       </main>

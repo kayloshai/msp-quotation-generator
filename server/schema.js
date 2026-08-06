@@ -1,6 +1,14 @@
 import { all, get, getAppSetting, getJsonSetting, run, setJsonSetting } from './db.js'
 
 export const typeDefs = `#graphql
+  type ListManagementData {
+    roles: [String!]!
+    trainings: [String!]!
+    departments: [String!]!
+    projects: [String!]!
+    quoteItems: [String!]!
+  }
+
   type Vendor {
     id: ID!
     company: String!
@@ -77,6 +85,7 @@ export const typeDefs = `#graphql
     plannedProjectHours: [ProjectHour!]!
     timeEntries: [TimeEntry!]!
     timeLogEntries: [TimeLogEntry!]!
+    listManagement: ListManagementData!
   }
 
   type Employee {
@@ -114,6 +123,7 @@ export const typeDefs = `#graphql
 
   type Query {
     bootstrap: BootstrapData!
+    listManagement: ListManagementData!
     vendors: [Vendor!]!
     labourPrices: [LabourPrice!]!
     materialItems(category: String): [MaterialItem!]!
@@ -207,6 +217,14 @@ export const typeDefs = `#graphql
     pdfPreviewUrl: String
   }
 
+  input VendorInput {
+    id: ID!
+    company: String!
+    vatNumber: String
+    quotationTo: String
+    shippingAddress: String
+  }
+
   input LegacyDataInput {
     employeeManagementData: String
     timeManagementData: String
@@ -217,15 +235,25 @@ export const typeDefs = `#graphql
     quoCounter: String
   }
 
+  input ListManagementInput {
+    roles: [String!]
+    trainings: [String!]
+    departments: [String!]
+    projects: [String!]
+    quoteItems: [String!]
+  }
+
   type Mutation {
     migrateLegacyData(input: LegacyDataInput): BootstrapData!
     setActivePage(page: String!): String!
     setQuotationCounter(counter: Int!): Int!
     setPanelDescription(description: String!): String!
     saveQuotationHistory(items: [QuotationHistoryInput!]!): [QuotationHistoryItem!]!
+    saveVendors(items: [VendorInput!]!): [Vendor!]!
     saveTimeEntries(items: [TimeEntryInput!]!): [TimeEntry!]!
     saveLabourPrices(items: [LabourPriceInput!]!): [LabourPrice!]!
     saveMaterialItems(category: String!, items: [MaterialItemInput!]!): [MaterialItem!]!
+    saveListManagement(input: ListManagementInput!): ListManagementData!
     addTimeLogEntry(input: TimeLogEntryInput!): TimeLogEntry!
 
     addEmployee(input: EmployeeInput!): Employee!
@@ -247,6 +275,52 @@ export const typeDefs = `#graphql
 `
 
 const toId = (id) => Number.parseInt(id, 10)
+const defaultListManagement = {
+  roles: [],
+  trainings: [
+    'Basic rigging',
+    'Working at heights level 1',
+    'Working at heights level 2',
+    'Basic fire fighting'
+  ],
+  departments: [],
+  projects: [],
+  quoteItems: ['Manufacture', 'Fabricate', 'Supply']
+}
+
+const normalizeListValues = (values) => {
+  return Array.from(
+    new Map(
+      (Array.isArray(values) ? values : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+        .map((value) => [value.toLowerCase(), value])
+    ).values()
+  ).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true }))
+}
+
+const normalizeListManagement = (value = {}) => {
+  return {
+    roles: normalizeListValues(value.roles || []),
+    trainings: normalizeListValues(value.trainings || []),
+    departments: normalizeListValues(value.departments || []),
+    projects: normalizeListValues(value.projects || []),
+    quoteItems: normalizeListValues(value.quoteItems || [])
+  }
+}
+
+const loadListManagement = async () => {
+  const stored = await getJsonSetting('listManagement', null)
+
+  if (!stored) {
+    const seeded = normalizeListManagement(defaultListManagement)
+    await setJsonSetting('listManagement', seeded)
+    return seeded
+  }
+
+  return normalizeListManagement(stored)
+}
+
 const parseJson = (value, fallback) => {
   if (!value) return fallback
 
@@ -266,6 +340,7 @@ const loadBootstrap = async () => {
   const timeLogEntries = await all(
     `SELECT id, action, groupName AS "group", section, timestamp, details FROM time_log_entries ORDER BY timestamp DESC LIMIT 200`
   )
+  const listManagement = await loadListManagement()
 
   return {
     activePage,
@@ -280,7 +355,8 @@ const loadBootstrap = async () => {
     currentProjectHours: await all(`SELECT id, employeeName AS name, hours, project, createdAt, updatedAt FROM current_project_hours ORDER BY id DESC`),
     plannedProjectHours: await all(`SELECT id, employeeName AS name, hours, project, createdAt, updatedAt FROM planned_project_hours ORDER BY id DESC`),
     timeEntries,
-    timeLogEntries
+    timeLogEntries,
+    listManagement
   }
 }
 
@@ -324,6 +400,34 @@ const replaceMaterialItems = async (category, items) => {
   }
 
   return all('SELECT * FROM material_items WHERE category = ? ORDER BY id ASC', [category])
+}
+
+const replaceVendors = async (items) => {
+  const normalizedVendors = Array.from(
+    new Map(
+      (Array.isArray(items) ? items : [])
+        .map((row) => ({
+          id: String(row?.id || '').trim(),
+          company: String(row?.company || '').trim(),
+          vatNumber: String(row?.vatNumber || '').trim(),
+          quotationTo: String(row?.quotationTo || '').trim(),
+          shippingAddress: String(row?.shippingAddress || '').trim()
+        }))
+        .filter((row) => row.id && row.company)
+        .map((row) => [row.id, row])
+    ).values()
+  )
+
+  await run('DELETE FROM vendors')
+
+  for (const row of normalizedVendors) {
+    await run(
+      `INSERT INTO vendors (id, company, vatNumber, quotationTo, shippingAddress) VALUES (?, ?, ?, ?, ?)`,
+      [row.id, row.company, row.vatNumber, row.quotationTo, row.shippingAddress]
+    )
+  }
+
+  return all('SELECT * FROM vendors ORDER BY company ASC')
 }
 
 const migrateLegacyData = async (input = {}) => {
@@ -437,6 +541,7 @@ const migrateLegacyData = async (input = {}) => {
 export const resolvers = {
   Query: {
     bootstrap: async () => loadBootstrap(),
+    listManagement: async () => loadListManagement(),
     vendors: async () => all('SELECT * FROM vendors ORDER BY company ASC'),
     labourPrices: async () => all('SELECT * FROM labour_prices ORDER BY id ASC'),
     materialItems: async (_, { category }) => {
@@ -512,6 +617,8 @@ export const resolvers = {
       return getJsonSetting('quotationHistory', [])
     },
 
+    saveVendors: async (_, { items }) => replaceVendors(items || []),
+
     saveTimeEntries: async (_, { items }) => {
       await setJsonSetting('timeEntries', items || [])
       return getJsonSetting('timeEntries', [])
@@ -520,6 +627,12 @@ export const resolvers = {
     saveLabourPrices: async (_, { items }) => replaceLabourPrices(items || []),
 
     saveMaterialItems: async (_, { category, items }) => replaceMaterialItems(category, items || []),
+
+    saveListManagement: async (_, { input }) => {
+      const nextLists = normalizeListManagement(input || {})
+      await setJsonSetting('listManagement', nextLists)
+      return nextLists
+    },
 
     addTimeLogEntry: async (_, { input }) => {
       await run(

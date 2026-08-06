@@ -2527,3 +2527,239 @@
   color: var(--color-primary);
   font-weight: 500;
 }
+
+.list-management-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.list-management-card {
+  border: 1px solid var(--color-border-tint);
+  border-radius: 12px;
+  background: var(--color-surface-tint);
+  padding: 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.list-management-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.list-management-card-header h3 {
+  margin: 0 0 0.2rem;
+  color: var(--color-green-600);
+}
+
+.list-management-card-header p {
+  margin: 0;
+  color: var(--color-text-muted-green);
+  font-size: 0.9rem;
+}
+
+.list-management-card-header strong {
+  color: var(--color-primary);
+}
+
+.list-management-empty {
+  margin: 0;
+  color: var(--color-text-muted-green);
+}
+
+.list-management-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.list-management-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 8px;
+  background: var(--color-white);
+}
+
+.list-management-list span {
+  color: var(--color-green-700);
+  word-break: break-word;
+}
+
+.list-management-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.list-management-actions .employee-action-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.list-management-add-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55rem;
+}
+
+.list-management-add-row input {
+  width: 100%;
+  padding: 0.68rem 0.72rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+
+.list-management-add-row .btn-add {
+  padding: 0.68rem 1rem;
+}
+
+.list-management-vendor-card {
+  margin-top: 1rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 12px;
+  background: var(--color-surface-tint);
+  padding: 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.list-management-vendor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.list-management-vendor-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.9rem;
+  padding: 0.8rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 10px;
+  background: var(--color-white);
+}
+
+.list-management-vendor-copy {
+  min-width: 0;
+}
+
+.list-management-vendor-copy h4 {
+  margin: 0 0 0.25rem;
+  color: var(--color-green-700);
+}
+
+.list-management-vendor-copy > p {
+  margin: 0 0 0.55rem;
+  color: var(--color-text-muted-green);
+  font-size: 0.9rem;
+}
+
+.list-management-vendor-addresses {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.list-management-vendor-addresses span {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--color-text-muted-green);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.list-management-vendor-addresses pre {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 8px;
+  background: var(--color-surface-tint);
+  color: var(--color-green-700);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 0.92rem;
+}
+
+.list-management-vendor-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.list-management-vendor-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--color-green-400);
+  font-weight: 600;
+}
+
+.list-management-vendor-form input,
+.list-management-vendor-form textarea {
+  width: 100%;
+  padding: 0.7rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 8px;
+  font-size: 0.92rem;
+  background: var(--color-white);
+}
+
+.list-management-vendor-form textarea {
+  resize: vertical;
+}
+
+.list-management-vendor-form-full {
+  grid-column: 1 / -1;
+}
+
+.list-management-vendor-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+@media (max-width: 1024px) {
+  .list-management-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .list-management-vendor-addresses {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .list-management-list li {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .list-management-actions {
+    justify-content: flex-end;
+  }
+
+  .list-management-vendor-item {
+    flex-direction: column;
+  }
+
+  .list-management-vendor-form {
+    grid-template-columns: 1fr;
+  }
+}
