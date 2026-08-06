@@ -275,6 +275,12 @@ function App() {
   const [lineItems, setLineItems] = useState([
     { id: 1, qty: '', item: toSlugValue(defaultQuoteItems[0]), description: '', unitPrice: '' }
   ])
+  const [newLineItem, setNewLineItem] = useState({
+    qty: '',
+    item: toSlugValue(defaultQuoteItems[0]),
+    description: '',
+    unitPrice: ''
+  })
 
   const upsertEmployeeTrainingRecords = (records) => {
     setEmployeeTrainingRecords((currentRecords) => {
@@ -743,38 +749,38 @@ function App() {
     const selectedVendor = vendorOptions.find((vendor) => vendor.id === value)
     if (!selectedVendor) return
 
-    if (target === 'quotation') {
-      setSelectedQuotationVendorId(value)
-      setQuotationTo(selectedVendor.quotationTo)
-    } else {
-      setSelectedShippingVendorId(value)
-      setShippingAddress(selectedVendor.shippingAddress)
-    }
+    setSelectedQuotationVendorId(value)
+    setSelectedShippingVendorId(value)
+    setQuotationTo(selectedVendor.quotationTo || '')
+    setShippingAddress(selectedVendor.shippingAddress || '')
   }
 
   useEffect(() => {
-    const selectedQuotationVendor = vendorOptions.find((vendor) => vendor.id === selectedQuotationVendorId)
-    if (selectedQuotationVendor) {
-      setQuotationTo(selectedQuotationVendor.quotationTo || '')
-    } else if (vendorOptions[0]) {
-      setSelectedQuotationVendorId(vendorOptions[0].id)
-      setQuotationTo(vendorOptions[0].quotationTo || '')
-    }
-
-    const selectedShippingVendor = vendorOptions.find((vendor) => vendor.id === selectedShippingVendorId)
-    if (selectedShippingVendor) {
-      setShippingAddress(selectedShippingVendor.shippingAddress || '')
-    } else if (vendorOptions[0]) {
-      setSelectedShippingVendorId(vendorOptions[0].id)
-      setShippingAddress(vendorOptions[0].shippingAddress || '')
-    }
-
     if (vendorOptions.length === 0) {
       setSelectedQuotationVendorId('')
       setSelectedShippingVendorId('')
       setQuotationTo('')
       setShippingAddress('')
+      return
     }
+
+    const activeVendorId = selectedQuotationVendorId || selectedShippingVendorId || vendorOptions[0]?.id || ''
+    const selectedVendor = vendorOptions.find((vendor) => vendor.id === activeVendorId) || vendorOptions[0]
+
+    if (!selectedVendor) {
+      return
+    }
+
+    if (selectedQuotationVendorId !== selectedVendor.id) {
+      setSelectedQuotationVendorId(selectedVendor.id)
+    }
+
+    if (selectedShippingVendorId !== selectedVendor.id) {
+      setSelectedShippingVendorId(selectedVendor.id)
+    }
+
+    setQuotationTo(selectedVendor.quotationTo || '')
+    setShippingAddress(selectedVendor.shippingAddress || '')
   }, [vendorOptions, selectedQuotationVendorId, selectedShippingVendorId])
 
   const resetVendorForm = () => {
@@ -891,8 +897,15 @@ function App() {
     const defaultItemValue = itemOptions[0]?.value || ''
     setLineItems([
       ...lineItems,
-      { id: newId, qty: '', item: defaultItemValue, description: '', unitPrice: '' }
+      {
+        id: newId,
+        qty: newLineItem.qty,
+        item: newLineItem.item || defaultItemValue,
+        description: newLineItem.description,
+        unitPrice: newLineItem.unitPrice
+      }
     ])
+    setNewLineItem({ qty: '', item: defaultItemValue, description: '', unitPrice: '' })
   }
 
   const removeLineItem = (id) => {
@@ -1674,15 +1687,35 @@ function App() {
           </button>
         </nav>
 
-        <div className="sidebar-card">
-          <p className="card-label">Current quote</p>
-          <h3>{quotationNumber}</h3>
-          <p>{quotationTo || 'Pick a customer'}</p>
-          <div className="summary-metric">
-            <span>Total</span>
-            <strong>R{parseFloat(calculateTotalPrice()).toFixed(2)}</strong>
+        {activePage === 'builder' && (
+          <div className="sidebar-card">
+            <p className="card-label">Current quote</p>
+            <h3>{quotationNumber}</h3>
+            <p>{quotationTo || 'Pick a customer'}</p>
+            <ul className="sidebar-card-list">
+              <li>
+                <span>Customer</span>
+                <strong>{quotationTo || 'Not selected'}</strong>
+              </li>
+              <li>
+                <span>Delivery</span>
+                <strong>{shippingAddress || 'Not selected'}</strong>
+              </li>
+              <li>
+                <span>Line items</span>
+                <strong>{lineItems.length}</strong>
+              </li>
+              <li>
+                <span>Status</span>
+                <strong>Draft</strong>
+              </li>
+            </ul>
+            <div className="summary-metric">
+              <span>Total</span>
+              <strong>R{parseFloat(calculateTotalPrice()).toFixed(2)}</strong>
+            </div>
           </div>
-        </div>
+        )}
       </aside>
 
       <main className="app-main">
@@ -1776,10 +1809,10 @@ function App() {
                   </div>
 
                   <div className="accordion-card">
-                    <button type="button" className="accordion-toggle" onClick={() => setAccordionOpen(!accordionOpen)}>
+                    {/* <button type="button" className="accordion-toggle" onClick={() => setAccordionOpen(!accordionOpen)}>
                       <span>Additional Panel</span>
                       <span className="accordion-icon">{accordionOpen ? '−' : '+'}</span>
-                    </button>
+                    </button> */}
 
                     {accordionOpen && (
                       <div className="accordion-content">
@@ -1803,82 +1836,152 @@ function App() {
                   </div>
 
                   <div className="line-items-section">
-                    <h2>Line Items</h2>
-                    <div className="line-items-table">
-                      <div className="table-header">
-                        <div className="col-qty">QTY</div>
-                        <div className="col-item">ITEM</div>
-                        <div className="col-description">DESCRIPTION</div>
-                        <div className="col-price">UNIT PRICE</div>
-                        <div className="col-total">LINE TOTAL</div>
-                        <div className="col-action">ACTION</div>
+                    <div className="line-items-header">
+                      <div>
+                        <h2>Line Items</h2>
+                        <p>Edit existing rows and add the next line item directly from the new-row inputs at the bottom.</p>
                       </div>
-
-                      {lineItems.map((item) => (
-                        <div key={item.id} className="table-row">
-                          <div className="col-qty" data-label="Qty">
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.qty}
-                              onChange={(e) => handleLineItemChange(item.id, 'qty', e.target.value)}
-                              placeholder="0"
-                            />
-                          </div>
-                          <div className="col-item" data-label="Item">
-                            <select
-                              value={item.item}
-                              onChange={(e) => handleLineItemChange(item.id, 'item', e.target.value)}
-                            >
-                              {itemOptions.length === 0 ? (
-                                <option value="">No quote items configured</option>
-                              ) : null}
-                              {itemOptions.map(opt => (
-                                <option key={opt.value} value={opt.value}>{opt.label}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="col-description" data-label="Description">
-                            <textarea
-                              value={item.description}
-                              onChange={(e) => {
-                                handleLineItemChange(item.id, 'description', e.target.value)
-                                resizeTextarea(e.target)
-                              }}
-                              onInput={(e) => resizeTextarea(e.target)}
-                              placeholder="Description"
-                              rows="2"
-                            />
-                          </div>
-                          <div className="col-price" data-label="Unit Price">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.unitPrice}
-                              onChange={(e) => handleLineItemChange(item.id, 'unitPrice', e.target.value)}
-                              placeholder="0.00"
-                            />
-                          </div>
-                          <div className="col-total" data-label="Line Total">
-                            {calculateLineTotal(item.qty, item.unitPrice)}
-                          </div>
-                          <div className="col-action" data-label="Action">
-                            <button
-                              className="btn-delete"
-                              onClick={() => removeLineItem(item.id)}
-                              disabled={lineItems.length === 1}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      ))}
                     </div>
 
-                    <button className="btn-add" onClick={addLineItem}>
-                      + Add Line Item
-                    </button>
+                    <div className="line-items-table-wrap">
+                      <table className="line-items-compact-table">
+                        <thead>
+                          <tr>
+                            <th>Qty</th>
+                            <th>Item</th>
+                            <th>Description</th>
+                            <th>Unit price</th>
+                            <th>Line total</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lineItems.map((item, index) => (
+                            <tr key={item.id}>
+                              <td data-label="Qty">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={item.qty}
+                                  onChange={(e) => handleLineItemChange(item.id, 'qty', e.target.value)}
+                                  placeholder="0"
+                                />
+                              </td>
+                              <td data-label="Item">
+                                <select
+                                  value={item.item}
+                                  onChange={(e) => handleLineItemChange(item.id, 'item', e.target.value)}
+                                >
+                                  {itemOptions.length === 0 ? (
+                                    <option value="">No quote items configured</option>
+                                  ) : null}
+                                  {itemOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td data-label="Description">
+                                <textarea
+                                  value={item.description}
+                                  onChange={(e) => {
+                                    handleLineItemChange(item.id, 'description', e.target.value)
+                                    resizeTextarea(e.target)
+                                  }}
+                                  onInput={(e) => resizeTextarea(e.target)}
+                                  placeholder="Description"
+                                  rows="2"
+                                />
+                              </td>
+                              <td data-label="Unit price">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.unitPrice}
+                                  onChange={(e) => handleLineItemChange(item.id, 'unitPrice', e.target.value)}
+                                  placeholder="0.00"
+                                />
+                              </td>
+                              <td data-label="Line total" className="line-items-total-cell">
+                                <strong>R{calculateLineTotal(item.qty, item.unitPrice)}</strong>
+                              </td>
+                              <td data-label="Action" className="line-items-action-cell">
+                                <button
+                                  type="button"
+                                  className="employee-action-btn employee-action-btn-delete"
+                                  onClick={() => removeLineItem(item.id)}
+                                  disabled={lineItems.length === 1}
+                                  aria-label={`Delete line item ${index + 1}`}
+                                  title={lineItems.length === 1 ? 'At least one line item is required' : `Delete line item ${index + 1}`}
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M6 7h12l-1 14H7L6 7zm3-4h6l1 2h4v2H4V5h4l1-2z" />
+                                  </svg>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="line-items-new-row">
+                            <td data-label="Qty">
+                              <input
+                                type="number"
+                                min="0"
+                                value={newLineItem.qty}
+                                onChange={(e) => setNewLineItem((currentItem) => ({ ...currentItem, qty: e.target.value }))}
+                                placeholder="0"
+                              />
+                            </td>
+                            <td data-label="Item">
+                              <select
+                                value={newLineItem.item}
+                                onChange={(e) => setNewLineItem((currentItem) => ({ ...currentItem, item: e.target.value }))}
+                              >
+                                {itemOptions.length === 0 ? (
+                                  <option value="">No quote items configured</option>
+                                ) : null}
+                                {itemOptions.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td data-label="Description">
+                              <textarea
+                                value={newLineItem.description}
+                                onChange={(e) => {
+                                  setNewLineItem((currentItem) => ({ ...currentItem, description: e.target.value }))
+                                  resizeTextarea(e.target)
+                                }}
+                                onInput={(e) => resizeTextarea(e.target)}
+                                placeholder="New line item description"
+                                rows="2"
+                              />
+                            </td>
+                            <td data-label="Unit price">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={newLineItem.unitPrice}
+                                onChange={(e) => setNewLineItem((currentItem) => ({ ...currentItem, unitPrice: e.target.value }))}
+                                placeholder="0.00"
+                              />
+                            </td>
+                            <td data-label="Line total" className="line-items-total-cell line-items-new-total-cell">
+                              <strong>R{calculateLineTotal(newLineItem.qty, newLineItem.unitPrice)}</strong>
+                            </td>
+                            <td data-label="Action" className="line-items-action-cell">
+                              <button
+                                type="button"
+                                className="btn-add line-items-add-row-button"
+                                onClick={addLineItem}
+                              >
+                                Add
+                              </button>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
 
                   <div className="totals-section">
@@ -1894,18 +1997,6 @@ function App() {
                       <span className="save-location-label">{saveLocationLabel}</span>
                     </div>
                   </div> */}
-                </div>
-              </div>
-
-              <div className="side-stack">
-                <div className="info-card">
-                  <h3>Quote snapshot</h3>
-                  <ul>
-                    <li><span>Customer</span><strong>{quotationTo || 'Not selected'}</strong></li>
-                    <li><span>Delivery</span><strong>{shippingAddress || 'Not selected'}</strong></li>
-                    <li><span>Line items</span><strong>{lineItems.length}</strong></li>
-                    <li><span>Status</span><strong>Draft</strong></li>
-                  </ul>
                 </div>
               </div>
             </div>
