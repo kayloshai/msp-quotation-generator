@@ -902,6 +902,35 @@
   text-transform: uppercase;
 }
 
+.employee-sort-button {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.employee-sort-label {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem;
+}
+
+.employee-sort-indicator {
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--color-primary);
+}
+
 .employee-roster-table tbody tr:nth-child(even) {
   background: var(--color-surface-tint);
 }

@@ -31,13 +31,13 @@ const sanitizeEmployeeRoster = (employees, validTitles) => {
 
   return (Array.isArray(employees) ? employees : []).map((employee) => {
     const rawRole = (employee?.role || employee?.title || '').trim()
-    const role = allowedTitles.has(rawRole) ? rawRole : ''
+    const role = rawRole
     const rawCoyNumber = String(employee?.coyNumber || '').replace(/\D/g, '')
     const coyNumber = coyNumberPattern.test(rawCoyNumber) ? rawCoyNumber : ''
     return {
       ...employee,
       role,
-      title: role,
+      title: allowedTitles.has(rawRole) ? rawRole : rawRole,
       coyNumber
     }
   })
@@ -87,6 +87,7 @@ function App() {
   const [editingEmployeeId, setEditingEmployeeId] = useState(null)
   const [editingEmployeeManagementId, setEditingEmployeeManagementId] = useState(null)
   const [employeeFormOpen, setEmployeeFormOpen] = useState(false)
+  const [employeeRosterSort, setEmployeeRosterSort] = useState({ column: 'name', direction: 'asc' })
   const [employeeManagementStatus, setEmployeeManagementStatus] = useState('Manage employees and keep the roster current.')
   const [editingCurrentProjectId, setEditingCurrentProjectId] = useState(null)
   const [editingPlannedProjectId, setEditingPlannedProjectId] = useState(null)
@@ -115,6 +116,59 @@ function App() {
   const [lineItems, setLineItems] = useState([
     { id: 1, qty: '', item: 'manufacture', description: '', unitPrice: '' }
   ])
+
+  const toggleEmployeeRosterSort = (column) => {
+    setEmployeeRosterSort((currentSort) => {
+      if (column === 'name') {
+        return {
+          column: 'name',
+          direction: 'asc'
+        }
+      }
+
+      if (currentSort.column === column) {
+        return {
+          column,
+          direction: currentSort.direction === 'asc' ? 'desc' : 'asc'
+        }
+      }
+
+      return {
+        column,
+        direction: 'asc'
+      }
+    })
+  }
+
+  const sortedEmployeeOptions = [...employeeOptions].sort((left, right) => {
+    const column = employeeRosterSort.column
+    const direction = employeeRosterSort.direction === 'asc' ? 1 : -1
+    const leftValue = String(left?.[column] || '').trim()
+    const rightValue = String(right?.[column] || '').trim()
+
+    if (!leftValue && !rightValue) {
+      return Number(left?.id || 0) - Number(right?.id || 0)
+    }
+
+    if (!leftValue) {
+      return 1
+    }
+
+    if (!rightValue) {
+      return -1
+    }
+
+    const comparison = leftValue.localeCompare(rightValue, undefined, {
+      sensitivity: 'base',
+      numeric: true
+    })
+
+    if (comparison !== 0) {
+      return comparison * direction
+    }
+
+    return Number(left?.id || 0) - Number(right?.id || 0)
+  })
 
   const hydrateFromBootstrap = (bootstrap) => {
     const incomingVendors = bootstrap.vendors || []
@@ -1477,8 +1531,20 @@ function App() {
                       <table className="employee-roster-table">
                         <thead>
                           <tr>
-                            <th>Name</th>
-                            <th>Role</th>
+                            <th aria-sort="ascending">
+                              <span className="employee-sort-label">
+                                <span>Name</span>
+                                <span className="employee-sort-indicator" aria-hidden="true">▲</span>
+                              </span>
+                            </th>
+                            <th aria-sort={employeeRosterSort.column === 'role' ? (employeeRosterSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                              <button type="button" className="employee-sort-button" onClick={() => toggleEmployeeRosterSort('role')}>
+                                <span>Role</span>
+                                <span className="employee-sort-indicator" aria-hidden="true">
+                                  {employeeRosterSort.column === 'role' ? (employeeRosterSort.direction === 'asc' ? '▲' : '▼') : '↕'}
+                                </span>
+                              </button>
+                            </th>
                             <th>Department</th>
                             <th>Coy Number</th>
                             <th>Email</th>
@@ -1487,14 +1553,14 @@ function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {employeeOptions.map((employee) => (
+                          {sortedEmployeeOptions.map((employee) => (
                             <tr key={employee.id}>
                               <td>{employee.name || 'Not set'}</td>
                               <td>{employee.role || 'Role not set'}</td>
                               <td>{employee.department || 'Department pending'}</td>
                               <td>{employee.coyNumber || 'Not set'}</td>
-                              <td>{employee.email || 'No email'}</td>
-                              <td>{employee.phone || 'No phone'}</td>
+                              <td>{employee.email || ''}</td>
+                              <td>{employee.phone || ''}</td>
                               <td className="employee-actions-cell">
                                 <div className="employee-list-actions">
                                   <button
@@ -2479,12 +2545,12 @@ function App() {
                       ))}
                     </>
                   ) : (
-                    employeeOptions.map((employee) => (
+                    sortedEmployeeOptions.map((employee) => (
                       <tr key={employee.id}>
                         <td>{employee.name || 'Unknown'}</td>
                         <td>{employee.role || '-'}</td>
                         <td>{employee.department || '-'}</td>
-                        <td className="text-right">{employee.email || '-'}</td>
+                        <td className="text-right">{employee.email || ''}</td>
                       </tr>
                     ))
                   )}
