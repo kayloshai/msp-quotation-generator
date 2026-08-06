@@ -284,10 +284,21 @@ export const initializeDatabase = async () => {
       department TEXT DEFAULT '',
       email TEXT DEFAULT '',
       phone TEXT DEFAULT '',
+      inductionExpiryDate TEXT DEFAULT '',
+      trainingRecords TEXT DEFAULT '[]',
       createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `)
+
+  const employeeColumns = await all('PRAGMA table_info(employees)')
+  if (!employeeColumns.some((column) => column.name === 'inductionExpiryDate')) {
+    await run(`ALTER TABLE employees ADD COLUMN inductionExpiryDate TEXT DEFAULT ''`)
+  }
+
+  if (!employeeColumns.some((column) => column.name === 'trainingRecords')) {
+    await run(`ALTER TABLE employees ADD COLUMN trainingRecords TEXT DEFAULT '[]'`)
+  }
 
   await run(`
     DELETE FROM employees

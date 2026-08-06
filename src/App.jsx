@@ -5,6 +5,12 @@ import './App.css'
 
 const validPages = ['builder', 'history', 'preview', 'time-management', 'employee-management', 'price-calculator']
 const coyNumberPattern = /^\d{8}$/
+const employeeTrainingOptions = [
+  'Basic rigging',
+  'Working at heights level 1',
+  'Working at heights level 2',
+  'Basic fire fighting'
+]
 const graphqlEndpoint = import.meta.env.VITE_GRAPHQL_URL || 'http://localhost:4000/'
 
 const graphqlRequest = async (query, variables = {}) => {
@@ -34,13 +40,58 @@ const sanitizeEmployeeRoster = (employees, validTitles) => {
     const role = rawRole
     const rawCoyNumber = String(employee?.coyNumber || '').replace(/\D/g, '')
     const coyNumber = coyNumberPattern.test(rawCoyNumber) ? rawCoyNumber : ''
+    let trainingRecords = []
+
+    if (Array.isArray(employee?.trainingRecords)) {
+      trainingRecords = employee.trainingRecords
+    } else if (employee?.trainingRecords) {
+      try {
+        const parsedTrainingRecords = JSON.parse(employee.trainingRecords)
+        if (Array.isArray(parsedTrainingRecords)) {
+          trainingRecords = parsedTrainingRecords
+        }
+      } catch (error) {
+        trainingRecords = []
+      }
+    }
+
     return {
       ...employee,
       role,
       title: allowedTitles.has(rawRole) ? rawRole : rawRole,
-      coyNumber
+      coyNumber,
+      inductionExpiryDate: String(employee?.inductionExpiryDate || '').trim(),
+      trainingRecords: trainingRecords
+        .map((record) => ({
+          training: String(record?.training || '').trim(),
+          expiryDate: String(record?.expiryDate || '').trim()
+        }))
+        .filter((record) => record.training)
     }
   })
+}
+
+const getEmployeeComplianceRows = (employee) => {
+  const trainingRows = Array.isArray(employee?.trainingRecords) ? employee.trainingRecords : []
+  const rows = []
+
+  if (String(employee?.inductionExpiryDate || '').trim()) {
+    rows.push({
+      label: 'Induction expiry date',
+      value: employee.inductionExpiryDate
+    })
+  }
+
+  rows.push(
+    ...trainingRows
+      .filter((record) => String(record?.training || '').trim())
+      .map((record) => ({
+        label: record.training,
+        value: record.expiryDate || 'DD/MM/YYYY'
+      }))
+  )
+
+  return rows
 }
 
 const normalizePageKey = (page) => {
@@ -49,6 +100,23 @@ const normalizePageKey = (page) => {
   }
 
   return validPages.includes(page) ? page : 'builder'
+}
+
+const getReportPrefix = (mode) => {
+  if (mode === 'time-report') return 'time-management-report'
+  if (mode === 'employee-report') return 'employee-report'
+  if (mode === 'price-report') return 'labour-rates-report'
+  return 'report'
+}
+
+const formatReportTimestampSegment = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hour = String(date.getHours()).padStart(2, '0')
+  const minute = String(date.getMinutes()).padStart(2, '0')
+  const second = String(date.getSeconds()).padStart(2, '0')
+  return `${year}${month}${day}-${hour}${minute}${second}`
 }
 
 function App() {
@@ -83,11 +151,17 @@ function App() {
   const [plannedProjectForm, setPlannedProjectForm] = useState({ name: '', hours: '', project: '' })
   const [currentProjectFormOpen, setCurrentProjectFormOpen] = useState(true)
   const [plannedProjectFormOpen, setPlannedProjectFormOpen] = useState(true)
-  const [employeeManagementForm, setEmployeeManagementForm] = useState({ name: '', role: '', coyNumber: '', department: '', email: '', phone: '' })
+  const [employeeManagementForm, setEmployeeManagementForm] = useState({ name: '', role: '', coyNumber: '', department: '', email: '', phone: '', inductionExpiryDate: '' })
+  const [employeeTrainingMode, setEmployeeTrainingMode] = useState('single')
+  const [employeeTrainingSingle, setEmployeeTrainingSingle] = useState({ training: '', expiryDate: '' })
+  const [employeeTrainingBulk, setEmployeeTrainingBulk] = useState({ trainings: [], expiryDate: '' })
+  const [employeeTrainingBulkOpen, setEmployeeTrainingBulkOpen] = useState(false)
+  const [employeeTrainingRecords, setEmployeeTrainingRecords] = useState([])
   const [editingEmployeeId, setEditingEmployeeId] = useState(null)
   const [editingEmployeeManagementId, setEditingEmployeeManagementId] = useState(null)
   const [employeeFormOpen, setEmployeeFormOpen] = useState(false)
   const [employeeRosterSort, setEmployeeRosterSort] = useState({ column: 'name', direction: 'asc' })
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState(null)
   const [employeeManagementStatus, setEmployeeManagementStatus] = useState('Manage employees and keep the roster current.')
   const [editingCurrentProjectId, setEditingCurrentProjectId] = useState(null)
   const [editingPlannedProjectId, setEditingPlannedProjectId] = useState(null)
@@ -113,9 +187,60 @@ function App() {
   const [linerPlates, setLinerPlates] = useState([])
   const [selectedLinerPlate, setSelectedLinerPlate] = useState(linerPlates[0]?.id || null)
   const [isDbHydrated, setIsDbHydrated] = useState(false)
+  const [reportMetadata, setReportMetadata] = useState({
+    reportNumber: 0,
+    generatedAtIso: '',
+    fileName: ''
+  })
   const [lineItems, setLineItems] = useState([
     { id: 1, qty: '', item: 'manufacture', description: '', unitPrice: '' }
   ])
+
+  const upsertEmployeeTrainingRecords = (records) => {
+    setEmployeeTrainingRecords((currentRecords) => {
+      const nextRecords = [...currentRecords]
+
+      for (const record of records) {
+        const trainingName = String(record?.training || '').trim()
+        const expiryDate = String(record?.expiryDate || '').trim()
+
+        if (!trainingName || !expiryDate) {
+          continue
+        }
+
+        const existingIndex = nextRecords.findIndex((entry) => entry.training === trainingName)
+        const nextEntry = { training: trainingName, expiryDate }
+
+        if (existingIndex >= 0) {
+          nextRecords[existingIndex] = nextEntry
+        } else {
+          nextRecords.push(nextEntry)
+        }
+      }
+
+      return nextRecords
+    })
+  }
+
+  const addSingleEmployeeTraining = () => {
+    if (!employeeTrainingSingle.training || !employeeTrainingSingle.expiryDate) return
+    upsertEmployeeTrainingRecords([employeeTrainingSingle])
+    setEmployeeTrainingSingle({ training: '', expiryDate: '' })
+  }
+
+  const addBulkEmployeeTraining = () => {
+    if (!employeeTrainingBulk.trainings.length || !employeeTrainingBulk.expiryDate) return
+
+    upsertEmployeeTrainingRecords(
+      employeeTrainingBulk.trainings.map((training) => ({
+        training,
+        expiryDate: employeeTrainingBulk.expiryDate
+      }))
+    )
+
+    setEmployeeTrainingBulk({ trainings: [], expiryDate: '' })
+    setEmployeeTrainingBulkOpen(false)
+  }
 
   const toggleEmployeeRosterSort = (column) => {
     setEmployeeRosterSort((currentSort) => {
@@ -138,6 +263,10 @@ function App() {
         direction: 'asc'
       }
     })
+  }
+
+  const toggleEmployeeDetails = (employeeId) => {
+    setExpandedEmployeeId((currentEmployeeId) => (currentEmployeeId === employeeId ? null : employeeId))
   }
 
   const sortedEmployeeOptions = [...employeeOptions].sort((left, right) => {
@@ -169,6 +298,21 @@ function App() {
 
     return Number(left?.id || 0) - Number(right?.id || 0)
   })
+
+  const latestUpdatedEmployee = employeeOptions.reduce((latestEmployee, currentEmployee) => {
+    if (!latestEmployee) {
+      return currentEmployee
+    }
+
+    const latestUpdatedAt = new Date(latestEmployee.updatedAt || 0).getTime()
+    const currentUpdatedAt = new Date(currentEmployee.updatedAt || 0).getTime()
+
+    if (currentUpdatedAt > latestUpdatedAt) {
+      return currentEmployee
+    }
+
+    return latestEmployee
+  }, null)
 
   const hydrateFromBootstrap = (bootstrap) => {
     const incomingVendors = bootstrap.vendors || []
@@ -262,7 +406,7 @@ function App() {
                     mineHours
                   }
                   materialItems { id category name price note }
-                  employees { id name role coyNumber department email phone createdAt updatedAt }
+                  employees { id name role coyNumber department email phone inductionExpiryDate trainingRecords createdAt updatedAt }
                   employeeHours { id name date timeIn timeOut createdAt updatedAt }
                   currentProjectHours { id name hours project createdAt updatedAt }
                   plannedProjectHours { id name hours project createdAt updatedAt }
@@ -306,7 +450,7 @@ function App() {
                     mineHours
                   }
                   materialItems { id category name price note }
-                  employees { id name role coyNumber department email phone createdAt updatedAt }
+                  employees { id name role coyNumber department email phone inductionExpiryDate trainingRecords createdAt updatedAt }
                   employeeHours { id name date timeIn timeOut createdAt updatedAt }
                   currentProjectHours { id name hours project createdAt updatedAt }
                   plannedProjectHours { id name hours project createdAt updatedAt }
@@ -675,13 +819,24 @@ function App() {
   }
 
   const resetEmployeeManagementForm = () => {
-    setEmployeeManagementForm({ name: '', role: '', coyNumber: '', department: '', email: '', phone: '' })
+    setEmployeeManagementForm({ name: '', role: '', coyNumber: '', department: '', email: '', phone: '', inductionExpiryDate: '' })
+    setEmployeeTrainingMode('single')
+    setEmployeeTrainingSingle({ training: '', expiryDate: '' })
+    setEmployeeTrainingBulk({ trainings: [], expiryDate: '' })
+    setEmployeeTrainingBulkOpen(false)
+    setEmployeeTrainingRecords([])
     setEditingEmployeeManagementId(null)
     setEmployeeFormOpen(false)
   }
 
   const handleEmployeeManagementSubmit = async (event) => {
     event.preventDefault()
+
+    const trainingRecordsPayload = JSON.stringify(employeeTrainingRecords)
+    const employeeInput = {
+      ...employeeManagementForm,
+      trainingRecords: trainingRecordsPayload
+    }
 
     if (!labourTitleOptions.includes(employeeManagementForm.role)) {
       setEmployeeManagementStatus('Please select a valid role from labour titles.')
@@ -702,12 +857,12 @@ function App() {
       const data = await graphqlRequest(
         `
           mutation UpdateEmployee($id: ID!, $input: EmployeeInput!) {
-            updateEmployee(id: $id, input: $input) { id name role coyNumber department email phone createdAt updatedAt }
+            updateEmployee(id: $id, input: $input) { id name role coyNumber department email phone inductionExpiryDate trainingRecords createdAt updatedAt }
           }
         `,
         {
           id: editingEmployeeManagementId,
-          input: employeeManagementForm
+          input: employeeInput
         }
       )
 
@@ -724,10 +879,10 @@ function App() {
       const data = await graphqlRequest(
         `
           mutation AddEmployee($input: EmployeeInput!) {
-            addEmployee(input: $input) { id name role coyNumber department email phone createdAt updatedAt }
+            addEmployee(input: $input) { id name role coyNumber department email phone inductionExpiryDate trainingRecords createdAt updatedAt }
           }
         `,
-        { input: employeeManagementForm }
+        { input: employeeInput }
       )
 
       const newEmployee = data.addEmployee
@@ -748,14 +903,23 @@ function App() {
       coyNumber: employee.coyNumber || '',
       department: employee.department || '',
       email: employee.email || '',
-      phone: employee.phone || ''
+      phone: employee.phone || '',
+      inductionExpiryDate: employee.inductionExpiryDate || ''
     })
+    setEmployeeTrainingMode('single')
+    setEmployeeTrainingSingle({ training: '', expiryDate: '' })
+    setEmployeeTrainingBulk({ trainings: [], expiryDate: '' })
+    setEmployeeTrainingBulkOpen(false)
+    setEmployeeTrainingRecords(Array.isArray(employee.trainingRecords) ? employee.trainingRecords : [])
   }
 
   const deleteEmployee = async (id) => {
     await graphqlRequest(`mutation DeleteEmployee($id: ID!) { deleteEmployee(id: $id) }`, { id })
     const nextEmployees = employeeOptions.filter((employee) => employee.id !== id)
     setEmployeeOptions(nextEmployees)
+    if (expandedEmployeeId === id) {
+      setExpandedEmployeeId(null)
+    }
     setEmployeeManagementStatus('Employee removed from the database.')
 
     if (editingEmployeeManagementId === id) {
@@ -837,6 +1001,14 @@ function App() {
     return quoteData
   }
 
+  const nextReportNumber = () => {
+    if (typeof window === 'undefined') return 1
+    const current = Number.parseInt(localStorage.getItem('report-download-counter') || '0', 10) || 0
+    const next = current + 1
+    localStorage.setItem('report-download-counter', String(next))
+    return next
+  }
+
   const openHistoryModal = (quote) => {
     setSelectedHistoryQuote(quote)
   }
@@ -847,17 +1019,17 @@ function App() {
 
   const handleHeaderExport = async () => {
     if (activePage === 'time-management') {
-      await generateReportPDF('time-report', 'time-management-report.pdf')
+      await generateReportPDF('time-report')
       return
     }
 
     if (activePage === 'employee-management') {
-      await generateReportPDF('employee-report', 'employee-report.pdf')
+      await generateReportPDF('employee-report')
       return
     }
 
     if (activePage === 'price-calculator') {
-      await generateReportPDF('price-report', 'labour-rates-report.pdf')
+      await generateReportPDF('price-report')
       return
     }
 
@@ -968,7 +1140,18 @@ function App() {
     }
   }
 
-  const generateReportPDF = async (mode, fileName) => {
+  const generateReportPDF = async (mode) => {
+    const reportNumber = nextReportNumber()
+    const generatedAt = new Date()
+    const timestampSegment = formatReportTimestampSegment(generatedAt)
+    const reportCode = `RPT${String(reportNumber).padStart(4, '0')}`
+    const fileName = `${getReportPrefix(mode)}-${reportCode}-${timestampSegment}.pdf`
+    setReportMetadata({
+      reportNumber,
+      generatedAtIso: generatedAt.toISOString(),
+      fileName
+    })
+
     setPdfTemplateMode(mode)
     await new Promise((resolve) => setTimeout(resolve, 150))
 
@@ -1053,6 +1236,10 @@ function App() {
       alert('Error generating report PDF. Please check the console for details.')
     }
   }
+
+  const generatedReportDate = reportMetadata.generatedAtIso ? new Date(reportMetadata.generatedAtIso) : new Date()
+  const generatedReportLabel = generatedReportDate.toLocaleString()
+  const generatedReportCode = reportMetadata.reportNumber > 0 ? `RPT${String(reportMetadata.reportNumber).padStart(4, '0')}` : 'RPT0000'
 
   return (
     <div className="app-shell">
@@ -1436,7 +1623,7 @@ function App() {
               </div>
               <div className="employee-summary-card">
                 <span>Latest update</span>
-                <strong>{employeeOptions[0]?.name || 'No roster yet'}</strong>
+                <strong>{latestUpdatedEmployee?.name || 'No roster yet'}</strong>
               </div>
             </div>
 
@@ -1510,6 +1697,144 @@ function App() {
                         placeholder="Phone"
                       />
                     </label>
+                    <label className="employee-form-full-width">
+                      <span>Induction expiry date</span>
+                      <input
+                        type="date"
+                        value={employeeManagementForm.inductionExpiryDate}
+                        onChange={(e) => setEmployeeManagementForm({ ...employeeManagementForm, inductionExpiryDate: e.target.value })}
+                      />
+                    </label>
+
+                    <div className="employee-training-panel employee-form-full-width">
+                      <div className="employee-card-header employee-training-header">
+                        <h4>Training compliance</h4>
+                        <div className="employee-training-mode-toggle" role="tablist" aria-label="Training entry mode">
+                          <button
+                            type="button"
+                            className={`employee-training-mode-button ${employeeTrainingMode === 'single' ? 'active' : ''}`}
+                            onClick={() => setEmployeeTrainingMode('single')}
+                          >
+                            Single
+                          </button>
+                          <button
+                            type="button"
+                            className={`employee-training-mode-button ${employeeTrainingMode === 'bulk' ? 'active' : ''}`}
+                            onClick={() => setEmployeeTrainingMode('bulk')}
+                          >
+                            Bulk
+                          </button>
+                        </div>
+                      </div>
+
+                      {employeeTrainingMode === 'single' ? (
+                        <div className="employee-training-grid">
+                          <label>
+                            <span>Training</span>
+                            <select
+                              value={employeeTrainingSingle.training}
+                              onChange={(e) => setEmployeeTrainingSingle({ ...employeeTrainingSingle, training: e.target.value })}
+                            >
+                              <option value="">Select training</option>
+                              {employeeTrainingOptions.map((training) => (
+                                <option key={training} value={training}>
+                                  {training}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            <span>Expiry date</span>
+                            <input
+                              type="date"
+                              value={employeeTrainingSingle.expiryDate}
+                              onChange={(e) => setEmployeeTrainingSingle({ ...employeeTrainingSingle, expiryDate: e.target.value })}
+                            />
+                          </label>
+                          <div className="employee-training-actions">
+                            <button type="button" className="btn-secondary" onClick={addSingleEmployeeTraining}>
+                              Add training
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="employee-training-grid">
+                          <div className="employee-training-select-wrapper">
+                            <span>Training list</span>
+                            <button
+                              type="button"
+                              className="employee-training-dropdown-button"
+                              onClick={() => setEmployeeTrainingBulkOpen(!employeeTrainingBulkOpen)}
+                            >
+                              {employeeTrainingBulk.trainings.length > 0
+                                ? `${employeeTrainingBulk.trainings.length} selected`
+                                : 'Choose trainings'}
+                            </button>
+                            {employeeTrainingBulkOpen && (
+                              <div className="employee-training-dropdown-panel">
+                                {employeeTrainingOptions.map((training) => {
+                                  const isSelected = employeeTrainingBulk.trainings.includes(training)
+
+                                  return (
+                                    <label key={training} className="employee-training-checkbox-row">
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => {
+                                          setEmployeeTrainingBulk((currentBulk) => {
+                                            const nextTrainings = isSelected
+                                              ? currentBulk.trainings.filter((item) => item !== training)
+                                              : [...currentBulk.trainings, training]
+
+                                            return {
+                                              ...currentBulk,
+                                              trainings: nextTrainings
+                                            }
+                                          })
+                                        }}
+                                      />
+                                      <span>{training}</span>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          <label>
+                            <span>Expiry date</span>
+                            <input
+                              type="date"
+                              value={employeeTrainingBulk.expiryDate}
+                              onChange={(e) => setEmployeeTrainingBulk({ ...employeeTrainingBulk, expiryDate: e.target.value })}
+                            />
+                          </label>
+                          <div className="employee-training-actions">
+                            <button type="button" className="btn-secondary" onClick={addBulkEmployeeTraining}>
+                              Add selected trainings
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="employee-training-records">
+                        <div className="employee-training-records-header">
+                          <span>Saved training entries</span>
+                          <strong>{employeeTrainingRecords.length}</strong>
+                        </div>
+                        {employeeTrainingRecords.length === 0 ? (
+                          <p className="employee-training-empty">No training added yet.</p>
+                        ) : (
+                          <ul className="employee-training-list">
+                            {employeeTrainingRecords.map((record) => (
+                              <li key={`${record.training}-${record.expiryDate}`}>
+                                <span>{record.training}</span>
+                                <strong>{record.expiryDate || 'DD/MM/YYYY'}</strong>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
                     <div className="employee-form-actions">
                       <button type="submit" className="btn-add">{editingEmployeeManagementId ? 'Save changes' : 'Add employee'}</button>
                     </div>
@@ -1553,42 +1878,134 @@ function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {sortedEmployeeOptions.map((employee) => (
-                            <tr key={employee.id}>
-                              <td>{employee.name || 'Not set'}</td>
-                              <td>{employee.role || 'Role not set'}</td>
-                              <td>{employee.department || 'Department pending'}</td>
-                              <td>{employee.coyNumber || 'Not set'}</td>
-                              <td>{employee.email || ''}</td>
-                              <td>{employee.phone || ''}</td>
-                              <td className="employee-actions-cell">
-                                <div className="employee-list-actions">
-                                  <button
-                                    type="button"
-                                    className="employee-action-btn employee-action-btn-edit"
-                                    onClick={() => startEditingEmployee(employee)}
-                                    aria-label={`Edit ${employee.name || 'employee'}`}
-                                    title="Edit employee"
-                                  >
-                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                      <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l10.06-10.06.92.92L5.92 19.58zM20.71 5.63a1 1 0 0 0 0-1.41L19.78 3.29a1 1 0 0 0-1.41 0l-1.15 1.15 3.75 3.75 1.74-1.56z" />
-                                    </svg>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="employee-action-btn employee-action-btn-delete"
-                                    onClick={() => deleteEmployee(employee.id)}
-                                    aria-label={`Delete ${employee.name || 'employee'}`}
-                                    title="Delete employee"
-                                  >
-                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                      <path d="M6 7h12l-1 14H7L6 7zm3-4h6l1 2h4v2H4V5h4l1-2z" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                          {sortedEmployeeOptions.map((employee) => {
+                            const isExpanded = expandedEmployeeId === employee.id
+
+                            return (
+                              <Fragment key={employee.id}>
+                                <tr
+                                  className={`employee-roster-row ${isExpanded ? 'is-expanded' : ''}`}
+                                  onClick={() => toggleEmployeeDetails(employee.id)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                      event.preventDefault()
+                                      toggleEmployeeDetails(employee.id)
+                                    }
+                                  }}
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-expanded={isExpanded}
+                                  aria-label={`Toggle details for ${employee.name || 'employee'}`}
+                                >
+                                  <td>{employee.name || 'Not set'}</td>
+                                  <td>{employee.role || 'Role not set'}</td>
+                                  <td>{employee.department || 'Department pending'}</td>
+                                  <td>{employee.coyNumber || 'Not set'}</td>
+                                  <td>{employee.email || ''}</td>
+                                  <td>{employee.phone || ''}</td>
+                                  <td className="employee-actions-cell" onClick={(event) => event.stopPropagation()}>
+                                    <div className="employee-list-actions">
+                                      <button
+                                        type="button"
+                                        className="employee-action-btn employee-action-btn-edit"
+                                        onClick={() => startEditingEmployee(employee)}
+                                        aria-label={`Edit ${employee.name || 'employee'}`}
+                                        title="Edit employee"
+                                      >
+                                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                          <path d="M3 17.25V21h3.75L19.81 7.94l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l10.06-10.06.92.92L5.92 19.58zM20.71 5.63a1 1 0 0 0 0-1.41L19.78 3.29a1 1 0 0 0-1.41 0l-1.15 1.15 3.75 3.75 1.74-1.56z" />
+                                        </svg>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="employee-action-btn employee-action-btn-delete"
+                                        onClick={() => deleteEmployee(employee.id)}
+                                        aria-label={`Delete ${employee.name || 'employee'}`}
+                                        title="Delete employee"
+                                      >
+                                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                          <path d="M6 7h12l-1 14H7L6 7zm3-4h6l1 2h4v2H4V5h4l1-2z" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                                {isExpanded && (
+                                  <tr className="employee-details-row">
+                                    <td colSpan="7">
+                                      <div className="employee-details-panel">
+                                        <div className="employee-details-header">
+                                          <div>
+                                            {/* <p className="employee-details-kicker">Additional information</p>
+                                            <h4>{employee.name || 'Employee details'}</h4> */}
+                                          </div>
+                                          <span className="employee-details-badge">Expanded</span>
+                                        </div>
+                                        {/* <div className="employee-details-grid">
+                                          <div>
+                                            <span>Role</span>
+                                            <strong>{employee.role || 'Role not set'}</strong>
+                                          </div>
+                                          <div>
+                                            <span>Department</span>
+                                            <strong>{employee.department || 'Department pending'}</strong>
+                                          </div>
+                                          <div>
+                                            <span>Coy number</span>
+                                            <strong>{employee.coyNumber || 'Not set'}</strong>
+                                          </div>
+                                          <div>
+                                            <span>Email</span>
+                                            <strong>{employee.email || ''}</strong>
+                                          </div>
+                                          <div>
+                                            <span>Phone</span>
+                                            <strong>{employee.phone || ''}</strong>
+                                          </div>
+                                          <div>
+                                            <span>Record ID</span>
+                                            <strong>{employee.id}</strong>
+                                          </div>
+                                        </div> */}
+                                        <div className="employee-compliance-section">
+                                          <div className="employee-compliance-header">
+                                            <div>
+                                              <p className="employee-details-kicker">Compliance</p>
+                                              <h4>Induction and training</h4>
+                                            </div>
+                                          </div>
+                                          <div className="employee-compliance-table-wrap">
+                                            <table className="employee-compliance-table">
+                                              <thead>
+                                                <tr>
+                                                  <th>Requirement</th>
+                                                  <th>Expiry date</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {getEmployeeComplianceRows(employee).length > 0 ? (
+                                                  getEmployeeComplianceRows(employee).map((item) => (
+                                                    <tr key={item.label}>
+                                                      <td>{item.label}</td>
+                                                      <td className="employee-compliance-placeholder">{item.value}</td>
+                                                    </tr>
+                                                  ))
+                                                ) : (
+                                                  <tr>
+                                                    <td colSpan="2" className="employee-compliance-empty">No training assigned to this employee yet.</td>
+                                                  </tr>
+                                                )}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -2362,6 +2779,9 @@ function App() {
               <h2 className="document-title">
                 {pdfTemplateMode === 'time-report' ? 'TIME MANAGEMENT REPORT' : pdfTemplateMode === 'employee-report' ? 'EMPLOYEE REPORT' : pdfTemplateMode === 'price-report' ? 'LABOUR RATES REPORT' : 'QUOTATION'}
               </h2>
+              {pdfTemplateMode !== 'quote' && (
+                <p className="report-meta-inline">{generatedReportCode} • {generatedReportLabel}</p>
+              )}
               <p className="contact-info">
                 P O Box 3557, Brits, 0250<br/>
                 Tel: (012) 250 0111/3510<br/>
@@ -2452,7 +2872,11 @@ function App() {
                 <div className="meta-box">
                   <h3>REPORT SUMMARY</h3>
                   <div className="box-content">
-                    {pdfTemplateMode === 'time-report' ? `Generated: ${new Date().toLocaleString()}\nEntries: ${employeeHours.length + currentProjectHours.length + plannedProjectHours.length}` : pdfTemplateMode === 'employee-report' ? `Generated: ${new Date().toLocaleString()}\nEmployees: ${employeeOptions.length}` : `Generated: ${new Date().toLocaleString()}\nLabour Categories: ${labourPrices.length}`}
+                    {pdfTemplateMode === 'time-report'
+                      ? `Report: ${generatedReportCode}\nGenerated: ${generatedReportLabel}\nEntries: ${employeeHours.length + currentProjectHours.length + plannedProjectHours.length}`
+                      : pdfTemplateMode === 'employee-report'
+                        ? `Report: ${generatedReportCode}\nGenerated: ${generatedReportLabel}\nEmployees: ${employeeOptions.length}`
+                        : `Report: ${generatedReportCode}\nGenerated: ${generatedReportLabel}\nLabour Categories: ${labourPrices.length}`}
                   </div>
                 </div>
                 <div className="meta-box">
@@ -2475,12 +2899,21 @@ function App() {
                         <th style={{width: '20%', textAlign: 'right'}}>DAILY (11.5h)</th>
                       </>
                     ) : (
-                      <>
-                        <th style={{width: '25%'}}>{pdfTemplateMode === 'time-report' ? 'SECTION' : 'NAME'}</th>
-                        <th style={{width: '25%'}}>{pdfTemplateMode === 'time-report' ? 'ITEM' : 'ROLE'}</th>
-                        <th style={{width: '30%', textAlign: 'left'}}>{pdfTemplateMode === 'time-report' ? 'DETAILS' : 'DEPARTMENT'}</th>
-                        <th style={{width: '20%', textAlign: 'right'}}>{pdfTemplateMode === 'time-report' ? 'VALUE' : 'EMAIL'}</th>
-                      </>
+                      pdfTemplateMode === 'time-report' ? (
+                        <>
+                          <th style={{width: '25%'}}>SECTION</th>
+                          <th style={{width: '25%'}}>ITEM</th>
+                          <th style={{width: '30%', textAlign: 'left'}}>DETAILS</th>
+                          <th style={{width: '20%', textAlign: 'right'}}>VALUE</th>
+                        </>
+                      ) : (
+                        <>
+                          <th style={{width: '18%'}}>NAME</th>
+                          <th style={{width: '14%'}}>ROLE</th>
+                          <th style={{width: '14%'}}>DEPARTMENT</th>
+                          <th style={{width: '54%', textAlign: 'left'}}>CONTACT & COMPLIANCE</th>
+                        </>
+                      )
                     )}
                   </tr>
                 </thead>
@@ -2550,7 +2983,16 @@ function App() {
                         <td>{employee.name || 'Unknown'}</td>
                         <td>{employee.role || '-'}</td>
                         <td>{employee.department || '-'}</td>
-                        <td className="text-right">{employee.email || ''}</td>
+                        <td>
+                          {[
+                            `Email: ${employee.email || '-'}`,
+                            `Phone: ${employee.phone || '-'}`,
+                            `Induction Expiry: ${employee.inductionExpiryDate || '-'}`,
+                            `Training: ${Array.isArray(employee.trainingRecords) && employee.trainingRecords.length > 0
+                              ? employee.trainingRecords.map((record) => `${record.training} (${record.expiryDate || '-'})`).join('; ')
+                              : 'Not assigned'}`
+                          ].join('\n')}
+                        </td>
                       </tr>
                     ))
                   )}

@@ -860,6 +860,189 @@
   background: var(--color-white);
 }
 
+.employee-form-full-width {
+  grid-column: 1 / -1;
+}
+
+.employee-training-panel {
+  grid-column: 1 / -1;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 12px;
+  padding: 1rem;
+  background: var(--color-surface-tint);
+}
+
+.employee-training-header {
+  margin-bottom: 0.75rem;
+}
+
+.employee-training-header h4 {
+  margin: 0;
+  color: var(--color-green-600);
+}
+
+.employee-training-mode-toggle {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.employee-training-mode-button {
+  border: 1px solid var(--color-border-tint);
+  border-radius: 999px;
+  background: var(--color-white);
+  color: var(--color-green-600);
+  padding: 0.5rem 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.employee-training-mode-button.active {
+  background: var(--color-primary);
+  color: var(--color-white);
+  border-color: var(--color-primary);
+}
+
+.employee-training-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.employee-training-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--color-green-400);
+  font-weight: 600;
+}
+
+.employee-training-grid input,
+.employee-training-grid select {
+  width: 100%;
+  padding: 0.7rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 8px;
+  font-size: 0.92rem;
+  background: var(--color-white);
+}
+
+.employee-training-select-wrapper {
+  grid-column: 1 / -1;
+}
+
+.employee-training-select-wrapper > span {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.employee-training-dropdown-button {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 8px;
+  background: var(--color-white);
+  color: var(--color-green-700);
+  text-align: left;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.employee-training-dropdown-panel {
+  margin-top: 0.5rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 10px;
+  background: var(--color-white);
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  box-shadow: 0 10px 22px var(--shadow-card);
+}
+
+.employee-training-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--color-green-700);
+}
+
+.employee-training-checkbox-row:hover {
+  background: var(--color-primary-tint-2);
+}
+
+.employee-training-checkbox-row input {
+  min-height: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.employee-training-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.employee-training-records {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px dashed var(--color-border-tint);
+}
+
+.employee-training-records-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.employee-training-records-header span {
+  color: var(--color-text-muted-green);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.employee-training-records-header strong {
+  color: var(--color-green-800);
+}
+
+.employee-training-empty {
+  color: var(--color-text-muted-green);
+  margin: 0;
+}
+
+.employee-training-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.employee-training-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 10px;
+  background: var(--color-white);
+}
+
+.employee-training-list span {
+  color: var(--color-green-700);
+}
+
+.employee-training-list strong {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
 .employee-form-actions {
   grid-column: 1 / -1;
 }
@@ -933,6 +1116,156 @@
 
 .employee-roster-table tbody tr:nth-child(even) {
   background: var(--color-surface-tint);
+}
+
+.employee-roster-row {
+  cursor: pointer;
+}
+
+.employee-roster-row:hover {
+  background: var(--color-primary-tint);
+}
+
+.employee-roster-row.is-expanded {
+  background: var(--color-primary-tint-2);
+}
+
+.employee-details-row {
+  background: var(--color-white) !important;
+}
+
+.employee-details-row td {
+  padding: 0 0.8rem 0.9rem;
+  border-bottom: 1px solid var(--color-border-tint);
+}
+
+.employee-details-panel {
+  margin-top: 0.1rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 12px;
+  background: var(--color-surface-tint);
+  padding: 0.95rem;
+}
+
+.employee-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.employee-details-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-text-muted-green-2);
+}
+
+.employee-details-header h4 {
+  margin: 0;
+  color: var(--color-green-700);
+}
+
+.employee-details-badge {
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: var(--color-primary-tint);
+  color: var(--color-primary-deep);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.employee-details-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.employee-details-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 10px;
+  background: var(--color-white);
+}
+
+.employee-details-grid span {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted-green);
+}
+
+.employee-details-grid strong {
+  color: var(--color-green-900);
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
+.employee-compliance-section {
+  margin-top: 1rem;
+}
+
+.employee-compliance-header {
+  margin-bottom: 0.75rem;
+}
+
+.employee-compliance-header h4 {
+  margin: 0;
+  color: var(--color-green-700);
+}
+
+.employee-compliance-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.employee-compliance-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  border: 1px solid var(--color-border-tint);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--color-white);
+}
+
+.employee-compliance-table th,
+.employee-compliance-table td {
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border-tint);
+}
+
+.employee-compliance-table th {
+  background: var(--color-surface-muted);
+  color: var(--color-green-600);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.employee-compliance-table tbody tr:nth-child(even) {
+  background: var(--color-surface-tint);
+}
+
+.employee-compliance-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.employee-compliance-placeholder {
+  color: var(--color-text-muted-green);
+  font-style: italic;
+}
+
+.employee-compliance-empty {
+  color: var(--color-text-muted-green);
+  text-align: center;
+  font-style: italic;
 }
 
 .employee-roster-table tbody tr:hover {
@@ -1216,6 +1549,14 @@
   font-weight: 700;
   color: var(--color-primary);
   margin: 0 0 4px 0;
+}
+
+.report-meta-inline {
+  margin: 0 0 6px;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted-green);
 }
 
 .contact-info {
@@ -2063,6 +2404,45 @@
   .employee-actions-cell {
     width: 92px;
     min-width: 92px;
+  }
+
+  .employee-details-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-details-header {
+    flex-direction: column;
+  }
+
+  .employee-compliance-table {
+    min-width: 0;
+  }
+
+  .employee-compliance-table th,
+  .employee-compliance-table td {
+    padding: 0.65rem 0.7rem;
+    font-size: 0.88rem;
+  }
+
+  .employee-training-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-training-actions {
+    justify-content: stretch;
+  }
+
+  .employee-training-actions .btn-secondary {
+    width: 100%;
+  }
+
+  .employee-training-list li {
+    flex-direction: column;
+  }
+
+  .employee-training-dropdown-panel {
+    max-height: 260px;
+    overflow: auto;
   }
 }
 

@@ -87,6 +87,8 @@ export const typeDefs = `#graphql
     department: String
     email: String
     phone: String
+    inductionExpiryDate: String
+    trainingRecords: String
     createdAt: String!
     updatedAt: String!
   }
@@ -134,6 +136,8 @@ export const typeDefs = `#graphql
     department: String
     email: String
     phone: String
+    inductionExpiryDate: String
+    trainingRecords: String
   }
 
   input EmployeeHourInput {
@@ -535,8 +539,17 @@ export const resolvers = {
 
     addEmployee: async (_, { input }) => {
       const result = await run(
-        `INSERT INTO employees (name, role, coyNumber, department, email, phone) VALUES (?, ?, ?, ?, ?, ?)`,
-        [input.name, input.role || '', input.coyNumber || '', input.department || '', input.email || '', input.phone || '']
+        `INSERT INTO employees (name, role, coyNumber, department, email, phone, inductionExpiryDate, trainingRecords) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          input.name,
+          input.role || '',
+          input.coyNumber || '',
+          input.department || '',
+          input.email || '',
+          input.phone || '',
+          input.inductionExpiryDate || '',
+          input.trainingRecords || '[]'
+        ]
       )
 
       return get('SELECT * FROM employees WHERE id = ?', [result.lastID])
@@ -547,10 +560,20 @@ export const resolvers = {
       await run(
         `
           UPDATE employees
-          SET name = ?, role = ?, coyNumber = ?, department = ?, email = ?, phone = ?, updatedAt = CURRENT_TIMESTAMP
+          SET name = ?, role = ?, coyNumber = ?, department = ?, email = ?, phone = ?, inductionExpiryDate = ?, trainingRecords = ?, updatedAt = CURRENT_TIMESTAMP
           WHERE id = ?
         `,
-        [input.name, input.role || '', input.coyNumber || '', input.department || '', input.email || '', input.phone || '', parsedId]
+        [
+          input.name,
+          input.role || '',
+          input.coyNumber || '',
+          input.department || '',
+          input.email || '',
+          input.phone || '',
+          input.inductionExpiryDate || '',
+          input.trainingRecords || '[]',
+          parsedId
+        ]
       )
 
       return get('SELECT * FROM employees WHERE id = ?', [parsedId])
