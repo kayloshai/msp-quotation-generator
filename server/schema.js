@@ -71,11 +71,39 @@ export const typeDefs = `#graphql
     pdfPreviewUrl: String
   }
 
+  type Quotation {
+    id: ID!
+    quotationNumber: String!
+    quotationDate: String
+    vendorId: String
+    quotationTo: String
+    shippingAddress: String
+    panelDescription: String
+    lineItems: String!
+    totalPrice: String
+    status: String
+    pdfFileName: String
+    pdfMimeType: String
+    hasPdf: Boolean!
+    createdAt: String!
+    updatedAt: String!
+  }
+
+  type QuotationPdf {
+    id: ID!
+    quotationId: ID!
+    fileName: String
+    mimeType: String
+    base64Data: String!
+    updatedAt: String!
+  }
+
   type BootstrapData {
     activePage: String!
     quotationCounter: Int!
     panelDescription: String!
     quotationHistory: [QuotationHistoryItem!]!
+    quotations: [Quotation!]!
     vendors: [Vendor!]!
     labourPrices: [LabourPrice!]!
     materialItems: [MaterialItem!]!
@@ -123,6 +151,9 @@ export const typeDefs = `#graphql
 
   type Query {
     bootstrap: BootstrapData!
+    quotations: [Quotation!]!
+    quotation(id: ID!): Quotation
+    quotationPdf(quotationId: ID!): QuotationPdf
     listManagement: ListManagementData!
     vendors: [Vendor!]!
     labourPrices: [LabourPrice!]!
@@ -217,6 +248,23 @@ export const typeDefs = `#graphql
     pdfPreviewUrl: String
   }
 
+  input QuotationInput {
+    id: ID
+    quotationNumber: String!
+    quotationDate: String
+    vendorId: String
+    quotationTo: String
+    shippingAddress: String
+    panelDescription: String
+    lineItems: String!
+    totalPrice: String
+    status: String
+    pdfFileName: String
+    pdfMimeType: String
+    pdfBase64: String
+    persistPdf: Boolean
+  }
+
   input VendorInput {
     id: ID!
     company: String!
@@ -249,6 +297,8 @@ export const typeDefs = `#graphql
     setQuotationCounter(counter: Int!): Int!
     setPanelDescription(description: String!): String!
     saveQuotationHistory(items: [QuotationHistoryInput!]!): [QuotationHistoryItem!]!
+    saveQuotation(input: QuotationInput!): Quotation!
+    deleteQuotation(id: ID!): Boolean!
     saveVendors(items: [VendorInput!]!): [Vendor!]!
     saveTimeEntries(items: [TimeEntryInput!]!): [TimeEntry!]!
     saveLabourPrices(items: [LabourPriceInput!]!): [LabourPrice!]!
@@ -321,6 +371,58 @@ const loadListManagement = async () => {
   return normalizeListManagement(stored)
 }
 
+const mapQuotationRow = (row) => {
+  if (!row) return null
+
+  return {
+    id: row.id,
+    quotationNumber: row.quotationNumber,
+    quotationDate: row.quotationDate || '',
+    vendorId: row.vendorId || '',
+    quotationTo: row.quotationTo || '',
+    shippingAddress: row.shippingAddress || '',
+    panelDescription: row.panelDescription || '',
+    lineItems: row.lineItemsJson || '[]',
+    totalPrice: row.totalPrice || '0.00',
+    status: row.status || 'draft',
+    pdfFileName: row.pdfFileName || '',
+    pdfMimeType: row.pdfMimeType || 'application/pdf',
+    hasPdf: Boolean(row.hasPdf),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  }
+}
+
+const selectQuotationSql = `
+  SELECT
+    id,
+    quotationNumber,
+    quotationDate,
+    vendorId,
+    quotationTo,
+    shippingAddress,
+    panelDescription,
+    lineItemsJson,
+    totalPrice,
+    status,
+    pdfFileName,
+    pdfMimeType,
+    CASE WHEN pdfData IS NOT NULL AND length(pdfData) > 0 THEN 1 ELSE 0 END AS hasPdf,
+    createdAt,
+    updatedAt
+  FROM quotations
+`
+
+const listQuotations = async () => {
+  const rows = await all(`${selectQuotationSql} ORDER BY datetime(updatedAt) DESC`)
+  return rows.map((row) => mapQuotationRow(row))
+}
+
+const getQuotationById = async (id) => {
+  const row = await get(`${selectQuotationSql} WHERE id = ?`, [id])
+  return mapQuotationRow(row)
+}
+
 const parseJson = (value, fallback) => {
   if (!value) return fallback
 
@@ -341,12 +443,14 @@ const loadBootstrap = async () => {
     `SELECT id, action, groupName AS "group", section, timestamp, details FROM time_log_entries ORDER BY timestamp DESC LIMIT 200`
   )
   const listManagement = await loadListManagement()
+  const quotations = await listQuotations()
 
   return {
     activePage,
     quotationCounter: Number.parseInt(quotationCounterRaw || '0', 10) || 0,
     panelDescription,
     quotationHistory,
+    quotations,
     vendors: await all('SELECT * FROM vendors ORDER BY company ASC'),
     labourPrices: await all('SELECT * FROM labour_prices ORDER BY id ASC'),
     materialItems: await all('SELECT * FROM material_items ORDER BY category ASC, id ASC'),
@@ -428,6 +532,168 @@ const replaceVendors = async (items) => {
   }
 
   return all('SELECT * FROM vendors ORDER BY company ASC')
+}
+
+const saveQuotationRecord = async (input = {}) => {
+  const nowId = `quote-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+  const quotationId = String(input.id || nowId).trim()
+  const quotationNumber = String(input.quotationNumber || '').trim()
+
+  if (!quotationNumber) {
+    throw new Error('Quotation number is required.')
+  }
+
+  const lineItemsRaw = String(input.lineItems || '[]').trim() || '[]'
+  let lineItems = []
+
+  try {
+    const parsedLineItems = JSON.parse(lineItemsRaw)
+    lineItems = Array.isArray(parsedLineItems) ? parsedLineItems : []
+  } catch (error) {
+    lineItems = []
+  }
+
+  const normalizedLineItems = JSON.stringify(lineItems)
+  const persistPdf = Boolean(input.persistPdf)
+  const pdfBuffer = persistPdf && input.pdfBase64 ? Buffer.from(input.pdfBase64, 'base64') : null
+  const pdfFileName = String(input.pdfFileName || '').trim()
+  const pdfMimeType = String(input.pdfMimeType || 'application/pdf').trim() || 'application/pdf'
+
+  const existing = await get('SELECT id FROM quotations WHERE id = ?', [quotationId])
+
+  if (existing) {
+    if (persistPdf && pdfBuffer) {
+      await run(
+        `
+          UPDATE quotations
+          SET
+            quotationNumber = ?,
+            quotationDate = ?,
+            vendorId = ?,
+            quotationTo = ?,
+            shippingAddress = ?,
+            panelDescription = ?,
+            lineItemsJson = ?,
+            totalPrice = ?,
+            status = ?,
+            pdfFileName = ?,
+            pdfMimeType = ?,
+            pdfData = ?,
+            updatedAt = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [
+          quotationNumber,
+          String(input.quotationDate || '').trim(),
+          String(input.vendorId || '').trim(),
+          String(input.quotationTo || '').trim(),
+          String(input.shippingAddress || '').trim(),
+          String(input.panelDescription || '').trim(),
+          normalizedLineItems,
+          String(input.totalPrice || '0.00').trim(),
+          String(input.status || 'draft').trim(),
+          pdfFileName,
+          pdfMimeType,
+          pdfBuffer,
+          quotationId
+        ]
+      )
+    } else {
+      await run(
+        `
+          UPDATE quotations
+          SET
+            quotationNumber = ?,
+            quotationDate = ?,
+            vendorId = ?,
+            quotationTo = ?,
+            shippingAddress = ?,
+            panelDescription = ?,
+            lineItemsJson = ?,
+            totalPrice = ?,
+            status = ?,
+            updatedAt = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [
+          quotationNumber,
+          String(input.quotationDate || '').trim(),
+          String(input.vendorId || '').trim(),
+          String(input.quotationTo || '').trim(),
+          String(input.shippingAddress || '').trim(),
+          String(input.panelDescription || '').trim(),
+          normalizedLineItems,
+          String(input.totalPrice || '0.00').trim(),
+          String(input.status || 'draft').trim(),
+          quotationId
+        ]
+      )
+    }
+  } else {
+    await run(
+      `
+        INSERT INTO quotations (
+          id,
+          quotationNumber,
+          quotationDate,
+          vendorId,
+          quotationTo,
+          shippingAddress,
+          panelDescription,
+          lineItemsJson,
+          totalPrice,
+          status,
+          pdfFileName,
+          pdfMimeType,
+          pdfData
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        quotationId,
+        quotationNumber,
+        String(input.quotationDate || '').trim(),
+        String(input.vendorId || '').trim(),
+        String(input.quotationTo || '').trim(),
+        String(input.shippingAddress || '').trim(),
+        String(input.panelDescription || '').trim(),
+        normalizedLineItems,
+        String(input.totalPrice || '0.00').trim(),
+        String(input.status || 'draft').trim(),
+        persistPdf ? pdfFileName : '',
+        persistPdf ? pdfMimeType : 'application/pdf',
+        persistPdf ? pdfBuffer : null
+      ]
+    )
+  }
+
+  return getQuotationById(quotationId)
+}
+
+const deleteQuotationRecord = async (id) => {
+  const result = await run('DELETE FROM quotations WHERE id = ?', [id])
+  return result.changes > 0
+}
+
+const getQuotationPdfRecord = async (quotationId) => {
+  const row = await get(
+    `
+      SELECT id, pdfFileName, pdfMimeType, pdfData, updatedAt
+      FROM quotations
+      WHERE id = ?
+    `,
+    [quotationId]
+  )
+
+  if (!row || !row.pdfData) return null
+
+  return {
+    id: `${row.id}-pdf`,
+    quotationId: row.id,
+    fileName: row.pdfFileName || `${row.id}.pdf`,
+    mimeType: row.pdfMimeType || 'application/pdf',
+    base64Data: Buffer.from(row.pdfData).toString('base64'),
+    updatedAt: row.updatedAt
+  }
 }
 
 const migrateLegacyData = async (input = {}) => {
@@ -541,6 +807,9 @@ const migrateLegacyData = async (input = {}) => {
 export const resolvers = {
   Query: {
     bootstrap: async () => loadBootstrap(),
+    quotations: async () => listQuotations(),
+    quotation: async (_, { id }) => getQuotationById(String(id || '').trim()),
+    quotationPdf: async (_, { quotationId }) => getQuotationPdfRecord(String(quotationId || '').trim()),
     listManagement: async () => loadListManagement(),
     vendors: async () => all('SELECT * FROM vendors ORDER BY company ASC'),
     labourPrices: async () => all('SELECT * FROM labour_prices ORDER BY id ASC'),
@@ -616,6 +885,10 @@ export const resolvers = {
       await setJsonSetting('quotationHistory', items || [])
       return getJsonSetting('quotationHistory', [])
     },
+
+    saveQuotation: async (_, { input }) => saveQuotationRecord(input || {}),
+
+    deleteQuotation: async (_, { id }) => deleteQuotationRecord(String(id || '').trim()),
 
     saveVendors: async (_, { items }) => replaceVendors(items || []),
 

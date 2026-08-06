@@ -1,7 +1,9 @@
-import { Fragment, useState, useEffect, useRef } from 'react'
+import { Fragment, Suspense, lazy, useState, useEffect, useRef } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import './App.css'
+
+const PdfCanvasPreview = lazy(() => import('./PdfCanvasPreview'))
 
 const validPages = ['builder', 'history', 'preview', 'time-management', 'employee-management', 'price-calculator', 'list-management']
 const coyNumberPattern = /^\d{8}$/
@@ -181,6 +183,31 @@ const normalizeManagedListSettings = (value = {}) => {
   }
 }
 
+const blobToBase64 = async (blob) => {
+  const arrayBuffer = await blob.arrayBuffer()
+  const bytes = new Uint8Array(arrayBuffer)
+  let binary = ''
+
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+
+  return btoa(binary)
+}
+
+const base64ToBlobUrl = (base64Data, mimeType = 'application/pdf') => {
+  const binary = atob(base64Data)
+  const length = binary.length
+  const bytes = new Uint8Array(length)
+
+  for (let index = 0; index < length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+
+  const blob = new Blob([bytes], { type: mimeType })
+  return URL.createObjectURL(blob)
+}
+
 function App() {
   const quotationRef = useRef()
   const [vendorOptions, setVendorOptions] = useState([])
@@ -198,6 +225,9 @@ function App() {
   const [saveLocationHandle, setSaveLocationHandle] = useState(null)
   const [saveLocationLabel, setSaveLocationLabel] = useState('C:/Users/Welcome/Documents/Quotations')
   const [quotationHistory, setQuotationHistory] = useState([])
+  const [quotations, setQuotations] = useState([])
+  const [activeQuotationId, setActiveQuotationId] = useState('')
+  const [quoteSaveStatus, setQuoteSaveStatus] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [selectedHistoryQuote, setSelectedHistoryQuote] = useState(null)
   const [activePage, setActivePage] = useState('builder')
@@ -434,6 +464,7 @@ function App() {
     setTimeEntries(bootstrap.timeEntries || [])
     setTimeLogEntries(bootstrap.timeLogEntries || [])
     setQuotationHistory(bootstrap.quotationHistory || [])
+    setQuotations(bootstrap.quotations || [])
     setPanelDescription(bootstrap.panelDescription || '')
     setManagedLists(
       normalizeManagedListSettings({
@@ -501,6 +532,23 @@ function App() {
                     fileName
                     pdfPreviewUrl
                   }
+                  quotations {
+                    id
+                    quotationNumber
+                    quotationDate
+                    vendorId
+                    quotationTo
+                    shippingAddress
+                    panelDescription
+                    lineItems
+                    totalPrice
+                    status
+                    pdfFileName
+                    pdfMimeType
+                    hasPdf
+                    createdAt
+                    updatedAt
+                  }
                   vendors { id company vatNumber quotationTo shippingAddress }
                   labourPrices {
                     id
@@ -551,6 +599,23 @@ function App() {
                     savedAt
                     fileName
                     pdfPreviewUrl
+                  }
+                  quotations {
+                    id
+                    quotationNumber
+                    quotationDate
+                    vendorId
+                    quotationTo
+                    shippingAddress
+                    panelDescription
+                    lineItems
+                    totalPrice
+                    status
+                    pdfFileName
+                    pdfMimeType
+                    hasPdf
+                    createdAt
+                    updatedAt
                   }
                   vendors { id company vatNumber quotationTo shippingAddress }
                   labourPrices {
@@ -1379,6 +1444,239 @@ function App() {
     return quoteData
   }
 
+  const saveQuotationRecord = async ({ persistPdf = false, pdfBlob = null, pdfFileName = '' } = {}) => {
+    const shouldPersistPdf = persistPdf && import.meta.env.VITE_STORE_QUOTATION_PDF_IN_DB === 'true' && pdfBlob
+
+    const payload = {
+      id: activeQuotationId || undefined,
+      quotationNumber,
+      quotationDate,
+      vendorId: selectedQuotationVendorId || selectedShippingVendorId || '',
+      quotationTo,
+      shippingAddress,
+      panelDescription,
+      lineItems: JSON.stringify(lineItems),
+      totalPrice: parseFloat(calculateTotalPrice()).toFixed(2),
+      status: 'draft',
+      persistPdf: Boolean(shouldPersistPdf),
+      pdfFileName: shouldPersistPdf ? pdfFileName : '',
+      pdfMimeType: shouldPersistPdf ? 'application/pdf' : '',
+      pdfBase64: shouldPersistPdf ? await blobToBase64(pdfBlob) : ''
+    }
+
+    const data = await graphqlRequest(
+      `
+        mutation SaveQuotation($input: QuotationInput!) {
+          saveQuotation(input: $input) {
+            id
+            quotationNumber
+            quotationDate
+            vendorId
+            quotationTo
+            shippingAddress
+            panelDescription
+            lineItems
+            totalPrice
+            status
+            pdfFileName
+            pdfMimeType
+            hasPdf
+            createdAt
+            updatedAt
+          }
+        }
+      `,
+      { input: payload }
+    )
+
+    const savedQuotation = data?.saveQuotation
+    if (!savedQuotation) return null
+
+    setActiveQuotationId(savedQuotation.id)
+    setQuotations((currentQuotations) => {
+      const nextQuotations = [
+        savedQuotation,
+        ...currentQuotations.filter((item) => item.id !== savedQuotation.id)
+      ]
+
+      return nextQuotations
+    })
+
+    return savedQuotation
+  }
+
+  const persistPdfToQuotation = async (quotation, pdfBlob, pdfFileName) => {
+    const payload = {
+      id: quotation.id,
+      quotationNumber: quotation.quotationNumber,
+      quotationDate: quotation.quotationDate || '',
+      vendorId: quotation.vendorId || '',
+      quotationTo: quotation.quotationTo || '',
+      shippingAddress: quotation.shippingAddress || '',
+      panelDescription: quotation.panelDescription || '',
+      lineItems: quotation.lineItems || '[]',
+      totalPrice: quotation.totalPrice || '0.00',
+      status: quotation.status || 'draft',
+      persistPdf: true,
+      pdfFileName,
+      pdfMimeType: 'application/pdf',
+      pdfBase64: await blobToBase64(pdfBlob)
+    }
+
+    const data = await graphqlRequest(
+      `
+        mutation SaveQuotation($input: QuotationInput!) {
+          saveQuotation(input: $input) {
+            id
+            quotationNumber
+            quotationDate
+            vendorId
+            quotationTo
+            shippingAddress
+            panelDescription
+            lineItems
+            totalPrice
+            status
+            pdfFileName
+            pdfMimeType
+            hasPdf
+            createdAt
+            updatedAt
+          }
+        }
+      `,
+      { input: payload }
+    )
+
+    const savedQuotation = data?.saveQuotation
+    if (!savedQuotation) return null
+
+    setQuotations((currentQuotations) =>
+      currentQuotations.map((item) => (item.id === savedQuotation.id ? savedQuotation : item))
+    )
+
+    return savedQuotation
+  }
+
+  const saveCurrentQuotation = async () => {
+    try {
+      const savedQuotation = await saveQuotationRecord()
+      if (savedQuotation) {
+        setQuoteSaveStatus(`Saved ${savedQuotation.quotationNumber} at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`)
+      }
+    } catch (error) {
+      console.error('Failed to save quotation record', error)
+      setQuoteSaveStatus('Failed to save quotation. Ensure API is running.')
+    }
+  }
+
+  const applySavedQuotation = (quotation, { switchPage = true } = {}) => {
+    if (!quotation) return
+
+    let parsedLineItems = []
+
+    try {
+      const lineItemsPayload = JSON.parse(quotation.lineItems || '[]')
+      parsedLineItems = Array.isArray(lineItemsPayload) ? lineItemsPayload : []
+    } catch (error) {
+      parsedLineItems = []
+    }
+
+    setActiveQuotationId(quotation.id)
+    setQuotationNumber(quotation.quotationNumber || 'QUO1')
+    setQuotationDate(quotation.quotationDate || new Date().toISOString().split('T')[0])
+    setQuotationTo(quotation.quotationTo || '')
+    setShippingAddress(quotation.shippingAddress || '')
+    setPanelDescription(quotation.panelDescription || '')
+    setLineItems(
+      parsedLineItems.length > 0
+        ? parsedLineItems
+        : [{ id: 1, qty: '', item: itemOptions[0]?.value || '', description: '', unitPrice: '' }]
+    )
+
+    const matchedVendor = vendorOptions.find((vendor) => vendor.id === quotation.vendorId)
+    if (matchedVendor) {
+      setSelectedQuotationVendorId(matchedVendor.id)
+      setSelectedShippingVendorId(matchedVendor.id)
+    }
+
+    if (switchPage) {
+      setActivePage('builder')
+    }
+
+    setQuoteSaveStatus(`Loaded ${quotation.quotationNumber} for editing.`)
+  }
+
+  const openSavedQuotation = (quotation) => {
+    applySavedQuotation(quotation, { switchPage: true })
+  }
+
+  const previewSavedQuotation = async (quotation) => {
+    if (!quotation) return
+
+    if (quotation.hasPdf) {
+      try {
+        const data = await graphqlRequest(
+          `
+            query QuotationPdf($quotationId: ID!) {
+              quotationPdf(quotationId: $quotationId) {
+                id
+                fileName
+                mimeType
+                base64Data
+              }
+            }
+          `,
+          { quotationId: quotation.id }
+        )
+
+        const storedPdf = data?.quotationPdf
+        if (storedPdf?.base64Data) {
+          const previewUrl = base64ToBlobUrl(storedPdf.base64Data, storedPdf.mimeType || 'application/pdf')
+          setSelectedHistoryQuote({
+            id: storedPdf.id,
+            quotationNumber: quotation.quotationNumber,
+            pdfPreviewUrl: previewUrl
+          })
+          setHistoryOpen(true)
+          return
+        }
+      } catch (error) {
+        console.error('Failed to load stored PDF preview', error)
+      }
+    }
+
+    applySavedQuotation(quotation, { switchPage: false })
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    await generatePDF({
+      download: false,
+      persistQuotation: false,
+      persistToQuotation: quotation,
+      saveToHistory: false,
+      openModal: true,
+      fileNameOverride: `${quotation.quotationNumber}.pdf`
+    })
+  }
+
+  const deleteSavedQuotation = async (quotationId) => {
+    try {
+      await graphqlRequest(
+        `mutation DeleteQuotation($id: ID!) { deleteQuotation(id: $id) }`,
+        { id: quotationId }
+      )
+
+      setQuotations((currentQuotations) => currentQuotations.filter((quotation) => quotation.id !== quotationId))
+
+      if (activeQuotationId === quotationId) {
+        setActiveQuotationId('')
+      }
+    } catch (error) {
+      console.error('Failed to delete quotation', error)
+      setQuoteSaveStatus('Failed to delete quotation.')
+    }
+  }
+
   const nextReportNumber = () => {
     if (typeof window === 'undefined') return 1
     const current = Number.parseInt(localStorage.getItem('report-download-counter') || '0', 10) || 0
@@ -1392,6 +1690,10 @@ function App() {
   }
 
   const closeHistoryModal = () => {
+    if (selectedHistoryQuote?.pdfPreviewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(selectedHistoryQuote.pdfPreviewUrl)
+    }
+
     setSelectedHistoryQuote(null)
   }
 
@@ -1414,7 +1716,14 @@ function App() {
     await generatePDF()
   }
 
-  const generatePDF = async () => {
+  const generatePDF = async ({
+    download = true,
+    persistQuotation = true,
+    persistToQuotation = null,
+    saveToHistory = true,
+    openModal = true,
+    fileNameOverride = ''
+  } = {}) => {
     setPdfTemplateMode('quote')
     await new Promise((resolve) => setTimeout(resolve, 150))
     try {
@@ -1495,23 +1804,61 @@ function App() {
         savedAt: new Date().toISOString()
       }
 
-      const fileName = `${quotationNumber}.pdf`
+      const fileName = fileNameOverride || `${quotationNumber}.pdf`
       const targetPath = `${saveLocationLabel || 'C:/Users/Welcome/Documents/Quotations'}/${fileName}`
       const pdfBlob = pdf.output('blob')
       const pdfPreviewUrl = URL.createObjectURL(pdfBlob)
-      const link = document.createElement('a')
-      link.href = pdfPreviewUrl
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      const savedQuote = saveQuotationHistory({
-        ...quoteHistoryItem,
-        fileName: targetPath,
-        pdfPreviewUrl
-      })
-      setSelectedHistoryQuote(savedQuote)
-      setHistoryOpen(true)
+
+      if (download) {
+        const link = document.createElement('a')
+        link.href = pdfPreviewUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }
+
+      if (persistQuotation) {
+        try {
+          await saveQuotationRecord({
+            persistPdf: true,
+            pdfBlob,
+            pdfFileName: fileName
+          })
+        } catch (error) {
+          console.error('Failed to persist quotation record', error)
+        }
+      } else if (persistToQuotation) {
+        try {
+          await persistPdfToQuotation(persistToQuotation, pdfBlob, fileName)
+        } catch (error) {
+          console.error('Failed to persist quotation PDF', error)
+        }
+      }
+
+      if (saveToHistory) {
+        const savedQuote = saveQuotationHistory({
+          ...quoteHistoryItem,
+          fileName: targetPath,
+          pdfPreviewUrl
+        })
+
+        if (openModal) {
+          setSelectedHistoryQuote(savedQuote)
+          setHistoryOpen(true)
+        }
+      } else if (openModal) {
+        setSelectedHistoryQuote({
+          id: `preview-${Date.now()}`,
+          quotationNumber,
+          pdfPreviewUrl
+        })
+        setHistoryOpen(true)
+      }
+
+      if (!openModal) {
+        URL.revokeObjectURL(pdfPreviewUrl)
+      }
     } catch (error) {
       console.error('Error generating PDF:', error)
       alert('Error generating PDF. Please check the console for details.')
@@ -1637,14 +1984,14 @@ function App() {
             <span className="nav-icon">✎</span>
             Create Quote
           </button>
-          {/* <button
+          <button
             type="button"
             className={`nav-item ${activePage === 'history' ? 'active' : ''}`}
             onClick={() => setActivePage('history')}
           >
             <span className="nav-icon">🕘</span>
             History
-          </button> */}
+          </button>
           {/* <button
             type="button"
             className={`nav-item ${activePage === 'preview' ? 'active' : ''}`}
@@ -1736,6 +2083,14 @@ function App() {
                 Download PDF
               </button>
             )}
+            {activePage === 'builder' && (
+              <button type="button" className="btn-secondary" onClick={saveCurrentQuotation}>
+                Save quote
+              </button>
+            )}
+            {activePage === 'builder' && quoteSaveStatus ? (
+              <span className="status-badge">{quoteSaveStatus}</span>
+            ) : null}
             {(activePage === 'time-management' || activePage === 'employee-management') && (
               <button className="btn-generate" onClick={handleHeaderExport}>
                 Download report
@@ -1776,6 +2131,10 @@ function App() {
               </div>
               <span className="page-badge">Draft</span>
             </div>
+
+            {activeQuotationId ? (
+              <p className="time-log-status">Editing saved quotation: {quotationNumber}</p>
+            ) : null}
 
             <div className="builder-grid">
               <div className="main-stack">
@@ -2014,23 +2373,41 @@ function App() {
             </div>
 
             <div className="history-card history-card-page">
-              {quotationHistory.length === 0 ? (
-                <p className="empty-history">No quotations created yet.</p>
+              {quotations.length === 0 ? (
+                <p className="empty-history">No saved quotations yet.</p>
               ) : (
                 <div className="history-list history-list-page">
-                  {quotationHistory.map((quote) => (
-                    <button
-                      key={quote.id}
-                      type="button"
-                      className="history-item"
-                      onClick={() => openHistoryModal(quote)}
-                    >
+                  {quotations.map((quote) => (
+                    <article key={quote.id} className="history-item history-item-quote">
                       <div className="history-item-left">
                         <strong>{quote.quotationNumber}</strong>
-                        <span>{quote.dateCreated} {quote.timeCreated}</span>
+                        <span>{quote.quotationDate || '-'}</span>
                       </div>
-                      <div className="history-item-right">R{quote.totalPrice}</div>
-                    </button>
+                      <div className="history-item-right">R{quote.totalPrice || '0.00'}</div>
+                      <div className="history-item-actions">
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => openSavedQuotation(quote)}
+                        >
+                          Open
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => previewSavedQuotation(quote)}
+                        >
+                          Preview
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-delete"
+                          onClick={() => deleteSavedQuotation(quote.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </article>
                   ))}
                 </div>
               )}
@@ -3616,15 +3993,13 @@ function App() {
       {/* PDF Template */}
       {selectedHistoryQuote && (
         <div className="modal-overlay" onClick={closeHistoryModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content modal-content-pdf" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close modal-close-top" type="button" onClick={closeHistoryModal}>&times;</button>
             {selectedHistoryQuote.pdfPreviewUrl ? (
               <div className="pdf-preview-frame only-preview">
-                <iframe
-                  src={selectedHistoryQuote.pdfPreviewUrl}
-                  title="Quotation PDF Preview"
-                  className="pdf-preview-iframe"
-                />
+                <Suspense fallback={<p className="pdf-canvas-preview-error">Loading preview…</p>}>
+                  <PdfCanvasPreview fileUrl={selectedHistoryQuote.pdfPreviewUrl} />
+                </Suspense>
               </div>
             ) : null}
           </div>

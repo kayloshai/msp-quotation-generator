@@ -414,5 +414,30 @@ export const initializeDatabase = async () => {
     )
   `)
 
+  await run(`
+    CREATE TABLE IF NOT EXISTS quotations (
+      id TEXT PRIMARY KEY,
+      quotationNumber TEXT NOT NULL,
+      quotationDate TEXT DEFAULT '',
+      vendorId TEXT DEFAULT '',
+      quotationTo TEXT DEFAULT '',
+      shippingAddress TEXT DEFAULT '',
+      panelDescription TEXT DEFAULT '',
+      lineItemsJson TEXT NOT NULL DEFAULT '[]',
+      totalPrice TEXT DEFAULT '0.00',
+      status TEXT DEFAULT 'draft',
+      pdfFileName TEXT DEFAULT '',
+      pdfMimeType TEXT DEFAULT '',
+      pdfData BLOB,
+      createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  await run(`
+    CREATE INDEX IF NOT EXISTS idx_quotations_updated_at
+    ON quotations(updatedAt DESC)
+  `)
+
   await seedReferenceData()
 }

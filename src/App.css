@@ -1521,13 +1521,32 @@
   color: var(--color-primary);
 }
 
+.history-item-quote {
+  cursor: default;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.8rem;
+}
+
+.history-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.history-item-actions .btn-secondary,
+.history-item-actions .btn-delete {
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;
   background: var(--overlay-bg);
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   padding: calc(env(safe-area-inset-top, 0px) + 0.75rem) 0.75rem calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
   z-index: 1000;
 }
@@ -1539,6 +1558,13 @@
   box-shadow: 0 20px 45px var(--overlay-shadow);
   overflow: hidden;
   max-height: calc(100svh - 1.5rem);
+}
+
+.modal-content-pdf {
+  width: min(820px, 94vw);
+  height: min(92svh, 1200px);
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
@@ -1587,13 +1613,33 @@
   border: none;
   border-radius: 0;
   min-height: 0;
+  flex: 1;
+  background: var(--color-surface-pdf);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 12px;
 }
 
-.pdf-preview-iframe {
+.pdf-canvas-preview {
   width: 100%;
-  height: min(78svh, 720px);
-  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.pdf-canvas-preview-page {
+  display: block;
+  width: 100%;
+  height: auto;
   background: var(--color-white);
+  box-shadow: 0 2px 10px var(--overlay-shadow, rgba(0, 0, 0, 0.15));
+}
+
+.pdf-canvas-preview-error {
+  margin: auto;
+  color: var(--color-text-muted, #666);
+  font-size: 0.95rem;
 }
 
 .btn-generate {
@@ -2582,8 +2628,38 @@
     width: 100%;
   }
 
-  .pdf-preview-iframe {
-    height: 65svh;
+  .history-item-quote {
+    grid-template-columns: 1fr;
+  }
+
+  .history-item-actions {
+    justify-content: flex-end;
+  }
+
+  .modal-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .modal-content-pdf {
+    width: 100vw;
+    height: 100svh;
+    max-height: 100svh;
+    border-radius: 0;
+  }
+
+  .modal-content-pdf .modal-close-top {
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    right: calc(env(safe-area-inset-right, 0px) + 8px);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--color-white);
+    border-radius: 50%;
+    padding: 0;
   }
 
   .time-grid-table th,
